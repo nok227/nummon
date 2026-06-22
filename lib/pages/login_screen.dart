@@ -1,0 +1,159 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late TabController _tabController;
+
+  final TextEditingController _emailLoginController = TextEditingController();
+  final TextEditingController _passwordLoginController = TextEditingController();
+  final TextEditingController _emailRegisterController = TextEditingController();
+  final TextEditingController _passwordRegisterController = TextEditingController();
+
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  void _showSnackBar(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _loginWithEmail() async {
+    String email = _emailLoginController.text.trim();
+    String password = _passwordLoginController.text.trim();
+    if (email.isEmpty || password.isEmpty) {
+      _showSnackBar("กรุณากรอกข้อมูลให้ครบถ้วน");
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      // Admin logic
+      if (email == "admin_app" && password == "0001") {
+        email = "admin_app@travel.com";
+        password = "admin_app_0001";
+        try {
+          await _auth.signInWithEmailAndPassword(email: email, password: password);
+        } catch (e) {
+          await _auth.createUserWithEmailAndPassword(email: email, password: password);
+        }
+      } else {
+        await _auth.signInWithEmailAndPassword(email: email, password: password);
+      }
+      _showSnackBar("เข้าสู่ระบบสำเร็จ!");
+      // ไม่ต้องนำทางเพราะ StreamBuilder จะจัดการ
+    } on FirebaseAuthException catch (e) {
+      _showSnackBar(e.message ?? "เกิดข้อผิดพลาด");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _registerWithEmail() async {
+    String email = _emailRegisterController.text.trim();
+    String password = _passwordRegisterController.text.trim();
+    if (email.isEmpty || password.isEmpty) {
+      _showSnackBar("กรุณากรอกข้อมูล");
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await _auth.createUserWithEmailAndPassword(email: email, password: password);
+      _showSnackBar("สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ");
+      _emailRegisterController.clear();
+      _passwordRegisterController.clear();
+      _tabController.animateTo(0);
+    } catch (e) {
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+      final account = await googleSignIn.signIn();
+      if (account == null) return;
+      final auth = await account.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: auth.accessToken,
+        idToken: auth.idToken,
+      );
+      await _auth.signInWithCredential(credential);
+      _showSnackBar("เข้าสู่ระบบด้วย Google สำเร็จ!");
+    } catch (e) {
+      _showSnackBar("Google Sign-In ล้มเหลว: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text("ยินดีต้อนรับ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.teal,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.teal,
+          tabs: const [Tab(text: "เข้าสู่ระบบ"), Tab(text: "สมัครสมาชิก")],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 280,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        Column(children: [
+                          TextField(controller: _emailLoginController, decoration: const InputDecoration(labelText: "อีเมล หรือ admin_app", prefixIcon: Icon(Icons.email))),
+                          const SizedBox(height: 16),
+                          TextField(controller: _passwordLoginController, obscureText: true, decoration: const InputDecoration(labelText: "รหัสผ่าน", prefixIcon: Icon(Icons.lock))),
+                          const SizedBox(height: 24),
+                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _loginWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("เข้าสู่ระบบ", style: TextStyle(color: Colors.white)))),
+                        ]),
+                        Column(children: [
+                          TextField(controller: _emailRegisterController, decoration: const InputDecoration(labelText: "อีเมล", prefixIcon: Icon(Icons.mail_outline))),
+                          const SizedBox(height: 16),
+                          TextField(controller: _passwordRegisterController, obscureText: true, decoration: const InputDecoration(labelText: "รหัสผ่าน (6+ ตัว)", prefixIcon: Icon(Icons.lock_outline))),
+                          const SizedBox(height: 24),
+                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _registerWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("สมัครสมาชิก", style: TextStyle(color: Colors.white)))),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("หรือดำเนินการต่อด้วย", style: TextStyle(color: Colors.grey))), Expanded(child: Divider())]),
+                  const SizedBox(height: 20),
+                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(onPressed: _signInWithGoogle, icon: const Icon(Icons.g_mobiledata), label: const Text("ดำเนินการต่อด้วย Google", style: TextStyle(color: Colors.black87)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[100]))),
+                ],
+              ),
+            ),
+    );
+  }
+}

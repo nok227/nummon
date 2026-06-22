@@ -1,0 +1,66 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:label="abc_new"
+        android:name="${applicationName}"
+        android:icon="@mipmap/launcher_icon">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- สำหรับ image_cropper -->
+        <!-- 💡 แก้: ใช้ UCropTheme (กำหนดเองใน styles.xml) แทน Theme.AppCompat.Light.NoActionBar ตรงๆ
+             เพื่อให้ AppCompat resources ถูก resolve ครบ ปุ่ม Done (✓) บน toolbar จะขึ้นมาให้กดได้ -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/UCropTheme" />
+        <activity
+            android:name="com.canhub.cropper.CropImageActivity"
+            android:theme="@style/UCropTheme" />
+
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+        <!-- API key นี้ใช้สำหรับ google_maps_flutter (ถ้าไม่ได้ใช้ก็ไม่เป็นไร) -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs" />
+    </application>
+
+    <queries>
+        <!-- สำหรับ Google Maps -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="www.google.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <!-- อันเดิม -->
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+</manifest>
