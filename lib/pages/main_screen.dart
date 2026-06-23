@@ -77,7 +77,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _openSharePostForm(Map<String, dynamic> planData) {
-    Navigator.pop(context); 
+    Navigator.pop(context); // ปิด Drawer
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -148,7 +148,7 @@ class _MainScreenState extends State<MainScreen> {
                   onTap: () => pickDateTime(endCtrl),
                   decoration: const InputDecoration(
                     labelText: 'ເວລາກັບ (End Time)',
-                    hintText: 'ແຕະເພື່ອເລືອກເວລາ...',
+                    hintText: 'ແຕະເພື່ອເລືอกເວລາ...',
                     prefixIcon: Icon(Icons.access_time_filled),
                   ),
                 ),
@@ -197,9 +197,9 @@ class _MainScreenState extends State<MainScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົກເລີກ")),
           TextButton(
-            onPressed: () {
-              doc.reference.delete();
-              Navigator.pop(context);
+            onPressed: () async {
+              await doc.reference.delete();
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("ລົບເລີຍ", style: TextStyle(color: Colors.red)),
           ),
@@ -226,6 +226,7 @@ class _MainScreenState extends State<MainScreen> {
           'startDateTime': 'ຍັງບໍ່ໄດ້ກຳນົດ',
           'endDateTime': 'ຍັງບໍ່ໄດ້ກຳນົດ',
           'budget': 'ບໍ່ໄດ້ກຳນົດ',
+          
           'addedAt': FieldValue.serverTimestamp(),
         });
         if (context.mounted) {
@@ -288,8 +289,8 @@ class _MainScreenState extends State<MainScreen> {
                         builder: (context, snapshot) {
                           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                           final docs = snapshot.data!.docs;
-                          final planningItems = docs.where((d) => (d.data() as Map)['status'] == 'planning').toList();
-                          final completedItems = docs.where((d) => (d.data() as Map)['status'] == 'completed').toList();
+                          final planningItems = docs.where((d) => (d.data() as Map<String, dynamic>)['status'] == 'planning').toList();
+                          final completedItems = docs.where((d) => (d.data() as Map<String, dynamic>)['status'] == 'completed').toList();
 
                           return ListView(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -301,7 +302,7 @@ class _MainScreenState extends State<MainScreen> {
                               const SizedBox(height: 20),
                               const Text("✅ ສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange)),
                               const Divider(),
-                              if (completedItems.isEmpty) const Padding(padding: EdgeInsets.all(8.0), child: Text("ບໍ່ມີປະຫວັດການທ່ຽວ", style: TextStyle(color: Colors.grey, fontSize: 12))),
+                              if (completedItems.isEmpty) const Padding(padding: EdgeInsets.all(8.0), child: Text("ບໍ່ມີປະຫວັດการທ່ຽວ", style: TextStyle(color: Colors.grey, fontSize: 12))),
                               ...completedItems.map((doc) => _buildPlanCard(doc, isCompletedType: true)),
                             ],
                           );
@@ -400,10 +401,13 @@ class _MainScreenState extends State<MainScreen> {
                 IconButton(
                   tooltip: "ເບິ່ງແຜນທີ່",
                   icon: const Icon(Icons.map, size: 20, color: Colors.green), 
-                  onPressed: () => _openGoogleMap(data['latitude'], data['longitude'])
+                  onPressed: () => _openGoogleMap(
+                    (data['latitude'] as num?)?.toDouble() ?? 0.0,
+                    (data['longitude'] as num?)?.toDouble() ?? 0.0,
+                  )
                 ),
                 IconButton(
-                  tooltip: "ລົບແຜນການ",
+                  tooltip: "ລົບແຜนການ",
                   icon: const Icon(Icons.delete, size: 20, color: Colors.red), 
                   onPressed: () => _confirmDelete(context, doc)
                 ),
@@ -411,7 +415,9 @@ class _MainScreenState extends State<MainScreen> {
                   IconButton(
                     tooltip: "ທ່ຽວສຳເລັດແລ້ວ",
                     icon: const Icon(Icons.check_circle, size: 22, color: Colors.orange), 
-                    onPressed: () => doc.reference.update({'status': 'completed'})
+                    onPressed: () async {
+                      await doc.reference.update({'status': 'completed'});
+                    }
                   ),
               ],
             )
@@ -422,7 +428,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// ── หน้าต่างแผ่นฟอร์มเขียนรายละเอียดและแนบรูปภาพ ──
+// ── หน้าต่างแผ่นฟอร์มเขียนรายละเอียดและแนบรูปภาพ (บันทึกลง Firebase) ──
 class ShareTripPostSheet extends StatefulWidget {
   final Map<String, dynamic> planData;
   const ShareTripPostSheet({super.key, required this.planData});
@@ -437,23 +443,20 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
   final ImagePicker _picker = ImagePicker();
   
   final List<File> _selectedImages = [];
-  final List<String> _existingImages = []; // เก็บรูปภาพเดิมจากสถานที่
+  final List<String> _existingImages = []; 
   
   bool _isPosting = false;
 
   @override
   void initState() {
     super.initState();
-    // ดึงชื่อสถานที่มาตั้งเป็นหัวข้อเริ่มต้น (แก้ไขได้)
     _titleController.text = widget.planData['placeName'] ?? '';
     
-    // ดึงรูปภาพเดิมของสถานที่เข้ามาไว้ในลิสต์
     if (widget.planData['imageUrl'] != null && widget.planData['imageUrl'].toString().isNotEmpty) {
       _existingImages.add(widget.planData['imageUrl']);
     }
   }
 
-  // เลือกรูปจาก Gallery
   Future<void> _pickImages() async {
     int totalCurrentImages = _selectedImages.length + _existingImages.length;
     if (totalCurrentImages >= 10) {
@@ -476,7 +479,6 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
     }
   }
 
-  // อัปโหลดไป Cloudinary
   Future<List<String>> _uploadImagesToCloudinary() async {
     List<String> uploadedUrls = [];
     for (File file in _selectedImages) {
@@ -490,8 +492,6 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
         final responseData = await response.stream.toBytes();
         final result = json.decode(String.fromCharCodes(responseData));
         uploadedUrls.add(result['secure_url']);
-      } else {
-        debugPrint('Cloudinary upload failed: ${response.statusCode}');
       }
     }
     return uploadedUrls;
@@ -516,26 +516,29 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
     }
 
     try {
-      // อัปโหลดรูปใหม่ทั้งหมดไป Cloudinary
+      // 1. อัปโหลดรูปไป Cloudinary (ถ้ามี)
       List<String> finalImageUrls = await _uploadImagesToCloudinary();
-      
-      // นำรูปเก่าที่ดึงมาจากสถานที่มารวมกับรูปใหม่
       finalImageUrls.insertAll(0, _existingImages);
 
       String userName = user.displayName ?? user.email ?? 'ນັກທ່ອງທ່ຽວ';
       String userAvatar = user.photoURL ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100';
+      String userBackground = '';
+
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (doc.exists) {
         userName = doc.data()?['displayName'] ?? userName;
         userAvatar = doc.data()?['photoURL'] ?? userAvatar;
+        userBackground = doc.data()?['backgroundURL'] ?? userBackground;     
       }
 
+      // 2. บันทึกข้อมูลลงใน Collection 'user_posts' (ให้ profile ดึงไปใช้)
       await FirebaseFirestore.instance.collection('user_posts').add({
         'userId': user.uid,
         'userName': userName,
         'userAvatar': userAvatar,
+        'userBackground': userBackground,
         'placeName': widget.planData['placeName'] ?? '',
-        'title': _titleController.text.trim(), // บันทึกหัวข้อลง Firestore
+        'title': _titleController.text.trim(),
         'content': _contentController.text.trim(),
         'images': finalImageUrls,
         'createdAt': FieldValue.serverTimestamp(),
@@ -579,7 +582,6 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
           ),
           const SizedBox(height: 8),
           
-          // ช่องเพิ่มหัวข้อ
           TextField(
             controller: _titleController,
             decoration: const InputDecoration(
@@ -591,12 +593,11 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
           ),
           const SizedBox(height: 10),
           
-          // ช่องเนื้อหาเดิม
           TextField(
             controller: _contentController,
             maxLines: 3,
             decoration: const InputDecoration(
-              hintText: "ຂຽນລາຍລະອຽດຄວາມປະທັບໃຈຂອງທ່ານຢູ່ບ່ອນນີ້...", 
+              hintText: "ຽນລາຍລະອຽດຄວາມປະທັບໃຈຂອງທ່ານຢູ່ບ່ອນນີ້...", 
               border: OutlineInputBorder(),
             ),
           ),
@@ -608,14 +609,12 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
           ),
           const SizedBox(height: 15),
 
-          // แสดงรูปภาพทั้งที่ดึงมาและที่เลือกใหม่
           if (totalImages > 0)
             SizedBox(
               height: 80,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  // แสดงรูปเก่า (ดึงจากสถานที่)
                   ..._existingImages.asMap().entries.map((entry) {
                     int idx = entry.key;
                     String url = entry.value;
@@ -638,8 +637,6 @@ class _ShareTripPostSheetState extends State<ShareTripPostSheet> {
                       ),
                     );
                   }),
-                  
-                  // แสดงรูปใหม่ที่เพิ่งเลือก
                   ..._selectedImages.asMap().entries.map((entry) {
                     int idx = entry.key;
                     File file = entry.value;

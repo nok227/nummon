@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
+
 import 'edit_profile_page.dart';
 import 'add_highlight_page.dart';
 
@@ -21,29 +21,48 @@ class _ProfilePageState extends State<ProfilePage> {
   List<dynamic> highlights = [];
   bool _isUploading = false;
   final TextEditingController _editContentController = TextEditingController();
+  
+  // ตัวดักฟังข้อมูลผู้ใช้งานแบบ Real-time
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _listenToUserData();
   }
 
-  Future<void> _loadData() async {
+  // ดึงข้อมูลผู้ใช้แบบ Real-time เพื่อให้ข้อมูลไฮไลต์และโปรไฟล์อัปเดตอัตโนมัติ
+  void _listenToUserData() {
     user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
-      if (doc.exists) {
-        setState(() {
-          userData = doc.data();
-          highlights = userData?['highlights'] ?? [];
-        });
-      } else {
-        setState(() => userData = {});
-      }
+      _userSubscription = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .snapshots()
+          .listen((doc) {
+        if (doc.exists && mounted) {
+          setState(() {
+            userData = doc.data();
+            highlights = userData?['highlights'] ?? [];
+          });
+        } else if (mounted) {
+          setState(() {
+            userData = {};
+            highlights = [];
+          });
+        }
+      });
     }
   }
 
-  // ─── ฟังก์ชันแสดงรูปภาพใหญ่ทั่วไป (หน้าปก/โปรไฟล์) ───
+  @override
+  void dispose() {
+    _userSubscription?.cancel(); // คืน Memory ป้องกันข้อมูลรั่วไหล
+    _editContentController.dispose();
+    super.dispose();
+  }
+
+  // สำหรับดูรูปเดี่ยวๆ เช่น รูปโปรไฟล์ หรือ หน้าปก
   void _showImagePreview(String imageUrl, {String? title}) {
     showDialog(
       context: context,
@@ -85,7 +104,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ─── Like / Unlike ───
   Future<void> _toggleLike(String postId, List<String> likedBy, int currentLikes) async {
     final uid = user?.uid;
     if (uid == null) return;
@@ -103,7 +121,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // ─── แก้ไขโพสต์ ───
   void _editPost(Map<String, dynamic> postData) {
     _editContentController.text = postData['content'] ?? '';
     showModalBottomSheet(
@@ -149,7 +166,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ─── ลบโพสต์ ───
   Future<void> _deletePost(String postId) async {
     showDialog(
       context: context,
@@ -173,7 +189,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ─── ออกจากระบบ ───
   void _logout() {
     showDialog(
       context: context,
@@ -218,7 +233,7 @@ class _ProfilePageState extends State<ProfilePage> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const EditProfilePage()),
-            ).then((_) => _loadData()),
+            ),
             tooltip: "ແກ້ໄຂໂປຣໄຟລ໌",
           ),
           IconButton(
@@ -239,7 +254,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 GestureDetector(
                   onTap: () => _showImagePreview(coverUrl, title: "ຮູບພື້ນຫຼັງ"),
                   onLongPress: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage())).then((_) => _loadData());
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
                   },
                   child: Stack(
                     children: [
@@ -259,7 +274,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: GestureDetector(
                     onTap: () => _showImagePreview(photoUrl, title: "ຮູບໂປຣໄຟລ໌"),
                     onLongPress: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage())).then((_) => _loadData());
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
                     },
                     child: Stack(
                       children: [
@@ -295,7 +310,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const AddHighlightPage()),
-                    ).then((_) => _loadData()),
+                    ),
                     icon: const Icon(Icons.add_box),
                   ),
                 ],
@@ -307,7 +322,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 scrollDirection: Axis.horizontal,
                 itemCount: highlights.length,
                 itemBuilder: (context, index) {
-                  final h = highlights[index] as Map<String, dynamic>;
+                  final h = Map<String, dynamic>.from(highlights[index]);
                   return GestureDetector(
                     onTap: () {
                       Navigator.push(
@@ -360,7 +375,81 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const Divider(),
 
-            // ─── โพสต์ที่แชร์ ───
+            // ─── ສະຖານທີ່ໆທ່ຽວແລ້ວ (ດຶງຈາກ users/{uid}/plans status=completed) ───
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text("✅ ສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
+            ),
+            if (user != null)
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user!.uid)
+                    .collection('plans')
+                    .where('status', isEqualTo: 'completed')
+                    .orderBy('addedAt', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text("ຍັງບໍ່ມີສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+                  final completedPlaces = snapshot.data!.docs;
+                  return SizedBox(
+                    height: 130,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: completedPlaces.length,
+                      itemBuilder: (context, index) {
+                        final data = completedPlaces[index].data() as Map<String, dynamic>;
+                        final imageUrl = data['imageUrl'] ?? '';
+                        final placeName = data['placeName'] ?? '';
+                        return Container(
+                          width: 100,
+                          margin: const EdgeInsets.only(right: 10),
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: imageUrl.isNotEmpty
+                                    ? Image.network(
+                                        imageUrl,
+                                        width: 100, height: 90,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (c, e, s) => Container(
+                                          width: 100, height: 90, color: Colors.grey[300],
+                                          child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 100, height: 90, color: Colors.grey[300],
+                                        child: const Icon(Icons.place, color: Colors.orange, size: 36),
+                                      ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                placeName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            const Divider(),
+
+            // ─── โพสต์ที่แชร์ (ດຶງຂໍ້ມູນຈາກ Firebase) ───
             const Padding(
               padding: EdgeInsets.all(12),
               child: Text("ໂພສຕ໌ທີ່ແຊຣ໌", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -386,8 +475,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     itemBuilder: (context, index) {
                       final data = posts[index].data() as Map<String, dynamic>;
                       final postId = posts[index].id;
+                      
+                      // นำ ID แนบไปกับข้อมูลเพื่อให้ปุ่ม Edit ใช้งานได้
+                      data['id'] = postId;
 
-                      final title = data['title'] ?? ''; // ดึง title มาใช้งาน
+                      final title = data['title'] ?? ''; 
                       final content = data['content'] ?? '';
                       final placeName = data['placeName'] ?? '';
                       final images = (data['images'] as List?)?.map((e) => e.toString()).toList() ?? [];
@@ -412,7 +504,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                               const SizedBox(height: 6),
                               
-                              // แสดงหัวข้อถ้ามี
                               if (title.isNotEmpty) ...[
                                 Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 4),
@@ -420,15 +511,28 @@ class _ProfilePageState extends State<ProfilePage> {
                               
                               if (content.isNotEmpty) Text(content, style: const TextStyle(fontSize: 15)),
                               const SizedBox(height: 8),
+                              
                               if (images.isNotEmpty)
                                 SizedBox(
                                   height: 120,
                                   child: ListView.builder(
                                     scrollDirection: Axis.horizontal,
-                                    itemCount: images.length > 4 ? 4 : images.length,
+                                    itemCount: images.length,
                                     itemBuilder: (context, i) {
                                       return GestureDetector(
-                                        onTap: () => _showImagePreview(images[i], title: placeName),
+                                        // ປ່ຽນຈຸດນີ້: ເມື່ອກົດຮູບໃນໂພສ ໃຫ້ສົ່ງໄປໜ້າ PostImageViewerPage ແທນ
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => PostImageViewerPage(
+                                                images: images,
+                                                initialIndex: i,
+                                                title: placeName,
+                                              ),
+                                            ),
+                                          );
+                                        },
                                         child: Padding(
                                           padding: const EdgeInsets.only(right: 4),
                                           child: ClipRRect(
@@ -440,6 +544,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     },
                                   ),
                                 ),
+                                
                               Row(
                                 children: [
                                   IconButton(
@@ -478,9 +583,91 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-// ---------------------------------------------------------
-// 🌟 ລະບົບເບິ່ງໄຮໄລທ໌ແບບ Facebook/Instagram
-// ---------------------------------------------------------
+// ─── ຄລາດສຳລັບເບິ່ງຮູບໃນໂພສແບບເຕັມຈໍ ແລະ ສາມາດເລື່ອນຊ້າຍ-ຂວາໄດ້ ───
+class PostImageViewerPage extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+  final String title;
+
+  const PostImageViewerPage({
+    super.key,
+    required this.images,
+    required this.initialIndex,
+    required this.title,
+  });
+
+  @override
+  State<PostImageViewerPage> createState() => _PostImageViewerPageState();
+}
+
+class _PostImageViewerPageState extends State<PostImageViewerPage> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          widget.images.length > 1
+              ? "${widget.title} (${_currentIndex + 1}/${widget.images.length})"
+              : widget.title,
+          style: const TextStyle(fontSize: 16),
+        ),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.images.length,
+        onPageChanged: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        itemBuilder: (context, index) {
+          return InteractiveViewer( // ເພີ່ມອະນຸຍາດໃຫ້ຊູມຮູບເຂົ້າ-ອອກໄດ້
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Center(
+              child: Image.network(
+                widget.images[index],
+                fit: BoxFit.contain,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white,
+                  size: 50,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─── Highlight Viewer Page (ຂອງເດີມ) ───
 class HighlightViewerPage extends StatefulWidget {
   final Map<String, dynamic> highlight;
   const HighlightViewerPage({super.key, required this.highlight});
