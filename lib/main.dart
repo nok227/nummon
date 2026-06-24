@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pages/main_screen.dart';
-import 'pages/login_screen.dart';
+import 'auth/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // await Firebase.initializeApp(
-  //   options: const FirebaseOptions(
-  //     apiKey: "AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs",
-  //     appId: "1:447844170700:android:351a8b0df679a0aef63b69",
-  //     messagingSenderId: "447844170700",
-  //     projectId: "my-app-7eb60",
-  //     storageBucket: "my-app-7eb60.firebasestorage.app",
-  //   ),
-  // );
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: "AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs",
+      appId: "1:447844170700:android:351a8b0df679a0aef63b69",
+      messagingSenderId: "447844170700",
+      projectId: "my-app-7eb60",
+      storageBucket: "my-app-7eb60.firebasestorage.app",
+    ),
+  );
+  // await Firebase.initializeApp();
   runApp(const TravelApp());
 }
 

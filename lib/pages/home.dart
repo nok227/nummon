@@ -30,17 +30,97 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool isLoading = true;
   bool isAdmin = false;
-  bool _isClearingAll = false; 
-  String _searchQuery = "";
+  bool _isClearingAll = false;
   bool _isSearchVisible = false;
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  final TextEditingController _searchController = TextEditingController();
+  final ValueNotifier<String> _searchQueryNotifier = ValueNotifier<String>("");
+
+  // ── Firestore stream ────────────────────────────────────────────────────────
+  late final Stream<QuerySnapshot> _placesStream;
+
+  // ── Pagination (Facebook-style) ────────────────────────────────────────────
+  static const int _pageSize = 8;                 
+  final List<QueryDocumentSnapshot> _docs = [];   
+  DocumentSnapshot? _lastDoc;                      
+  bool _hasMore = true;                            
+  bool _isFetchingMore = false;                    
 
   @override
   void initState() {
     super.initState();
     _checkAdminStatus();
-    Future.delayed(const Duration(seconds: 2), () {
+
+    _placesStream = FirebaseFirestore.instance
+        .collection('places')
+        .orderBy('name')
+        .snapshots();
+
+    _loadFirstPage();
+
+    widget.scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchQueryNotifier.dispose();
+    widget.scrollController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  // ── Pagination helpers ─────────────────────────────────────────────────────
+
+  Future<void> _loadFirstPage() async {
+    if (mounted) setState(() => isLoading = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('places')
+          .orderBy('name')
+          .limit(_pageSize)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _docs
+          ..clear()
+          ..addAll(snap.docs);
+        _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : null;
+        _hasMore = snap.docs.length == _pageSize;
+        isLoading = false;
+      });
+    } catch (_) {
       if (mounted) setState(() => isLoading = false);
-    });
+    }
+  }
+
+  Future<void> _loadNextPage() async {
+    if (!_hasMore || _isFetchingMore || _lastDoc == null) return;
+    setState(() => _isFetchingMore = true);
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('places')
+          .orderBy('name')
+          .startAfterDocument(_lastDoc!)
+          .limit(_pageSize)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _docs.addAll(snap.docs);
+        _lastDoc = snap.docs.isNotEmpty ? snap.docs.last : _lastDoc;
+        _hasMore = snap.docs.length == _pageSize;
+        _isFetchingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isFetchingMore = false);
+    }
+  }
+
+  void _onScroll() {
+    final ctrl = widget.scrollController;
+    if (ctrl.position.pixels >= ctrl.position.maxScrollExtent * 0.9) {
+      _loadNextPage();
+    }
   }
 
   void _checkAdminStatus() {
@@ -64,8 +144,8 @@ class _HomePageState extends State<HomePage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text("🚨 ຄຳເຕືອນອັນຕະລາຍ 🚨"),
-        content: const Text("ທ່ານຕ້ອງການລົບສະຖານທີ່ທັງໝົດ ແລະ ຮູບພາບທັງໝົດໃນ Cloudinary ແທ້ຫຼືບໍ່? ຂໍ້ມູນຈະຫายໄປຕະຫຼອດການ!"),
+        title: const Text("🚨 คຳເຕືອນอันตະລาย 🚨"),
+        content: const Text("ທ່ານຕ້ອງການລົບສະຖານທີ່ທັງໝົດ ແລະ ຮູບພາບທັງໝົດໃນ Cloudinary ແທ้ຫຼືບໍ່? ຂໍ້ມູນຈະຫາຍໄປຕະຫຼອດການ!"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -150,7 +230,7 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("⚠️ ຢືນຢັນການລົບ"),
-        content: Text("ທ່ານຕ້ອງການລົບສະຖານທີ່ \"$name\" ແທ້ຫຼືບໍ່?"),
+        content: Text("ທ່ານຕ້ອງການລົບສະຖານທີ່ \"$name\" ແທ้ຫຼືບໍ່?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົກເລີກ")),
           TextButton(
@@ -309,7 +389,7 @@ class _HomePageState extends State<HomePage> {
                           });
                           _showSnackBar("ຈັດຮຽງຕຳແໜ່ງຮູບພາບ ແລະ ຕຳແໜ່ງເລື່ອນພາບສຳເລັດແລ້ວ!");
                         } catch (e) {
-                          _showSnackBar("ເກີดຂໍ້ຜິດພາດ: $e", isError: true);
+                          _showSnackBar("ເກີດຂໍ້ຜິດພາດ: $e", isError: true);
                         }
                       },
                       child: const Text("ບັນທຶກຕຳແໜ່ງໃໝ່"),
@@ -342,7 +422,7 @@ class _HomePageState extends State<HomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "📸 ເລືອກຮູບພາບປົກໃຫມ່",
+                "📸 ເለືອກຮູບພາບປົກໃຫມ່",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
               ),
               const SizedBox(height: 12),
@@ -363,7 +443,7 @@ class _HomePageState extends State<HomePage> {
                                     .collection('places')
                                     .doc(place.id)
                                     .update({'imageUrl': images[index]});
-                                _showSnackBar("ປ່ຽນຮູບພາບປົກສຳເລັດແລ້ວ!");
+                                _showSnackBar("ป່ຽນຮູບພາບປົກສຳເລັດແລ້ວ!");
                               } catch (e) {
                                 _showSnackBar("ເກີດຂໍ້ຜິດພາດ: $e", isError: true);
                               }
@@ -400,7 +480,7 @@ class _HomePageState extends State<HomePage> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: Colors.grey[200], 
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -425,12 +505,28 @@ class _HomePageState extends State<HomePage> {
                           Row(
                             children: [
                               if (isAdmin)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_forever, color: Colors.redAccent, size: 30),
-                                  tooltip: "ລ້າງຂໍ້ມູນທັງໝົດ",
-                                  onPressed: _clearAllDataAndImages,
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_horiz, color: Colors.white, size: 28),
+                                  tooltip: "ເມນູຈັດການ",
+                                  onSelected: (value) {
+                                    if (value == 'clear_all') {
+                                      _clearAllDataAndImages();
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'clear_all',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_forever, color: Colors.red),
+                                          SizedBox(width: 8),
+                                          Text('ລ້າງຂໍ້ມູນທັງໝົດ'),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              const SizedBox(width: 8),
+                              if (isAdmin) const SizedBox(width: 8),
                               IconButton(
                                 icon: Icon(
                                   _isSearchVisible ? Icons.close : Icons.search,
@@ -440,7 +536,10 @@ class _HomePageState extends State<HomePage> {
                                 onPressed: () {
                                   setState(() {
                                     _isSearchVisible = !_isSearchVisible;
-                                    if (!_isSearchVisible) _searchQuery = "";
+                                    if (!_isSearchVisible) {
+                                      _searchController.clear(); 
+                                      _searchQueryNotifier.value = ""; 
+                                    }
                                   });
                                 },
                               ),
@@ -517,9 +616,10 @@ class _HomePageState extends State<HomePage> {
                             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))],
                           ),
                           child: TextField(
-                            onChanged: (value) => setState(() => _searchQuery = value.trim()),
+                            controller: _searchController, 
+                            onChanged: (value) => _searchQueryNotifier.value = value.trim(),
                             decoration: const InputDecoration(
-                              hintText: "ຄົ້ນຫາສະຖານທີ່ ຫຼື ເມືອງ...",
+                              hintText: "ຄົ້ນຫາສະຖານທີ່ ຫຼື ຈຸດທ່ອງທ່ຽວຍ່ອຍ...",
                               prefixIcon: Icon(Icons.search, color: Colors.teal),
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(vertical: 14),
@@ -534,34 +634,61 @@ class _HomePageState extends State<HomePage> {
                 const StorySection(),
 
                 const Padding(
-                  padding: EdgeInsets.only(left: 20, top: 24, bottom: 12),
+                  padding: EdgeInsets.only(left: 16, top: 20, bottom: 8),
                   child: Text(
                     "ສະຖານທີ່ຍອດນິຍົມ",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
+                
                 if (isLoading)
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: 2,
+                    itemCount: 3,
                     itemBuilder: (context, index) => Shimmer.fromColors(
                       baseColor: Colors.grey[300]!,
                       highlightColor: Colors.grey[100]!,
                       child: Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Container(height: 240, color: Colors.white),
+                        margin: const EdgeInsets.only(bottom: 10), 
+                        elevation: 0,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: Container(color: Colors.white),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(height: 16, width: 200, color: Colors.white),
+                                  const SizedBox(height: 8),
+                                  Container(height: 12, width: 120, color: Colors.white),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   )
                 else
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance.collection('places').snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator(color: Colors.teal));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  ValueListenableBuilder<String>(
+                    valueListenable: _searchQueryNotifier,
+                    builder: (context, searchQuery, _) {
+                      final filteredDocs = _docs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final name = (data['name'] ?? '').toString().toLowerCase();
+                        final district = (data['district'] ?? '').toString().toLowerCase();
+                        final q = searchQuery.toLowerCase();
+                        return name.contains(q) || district.contains(q);
+                      }).toList();
+
+                      if (_docs.isEmpty) {
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.all(24),
@@ -569,15 +696,6 @@ class _HomePageState extends State<HomePage> {
                           ),
                         );
                       }
-
-                      final docs = snapshot.data!.docs;
-                      final filteredDocs = docs.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final name = (data['name'] ?? '').toString().toLowerCase();
-                        final district = (data['district'] ?? '').toString().toLowerCase();
-                        final query = _searchQuery.toLowerCase();
-                        return name.contains(query) || district.contains(query);
-                      }).toList();
 
                       if (filteredDocs.isEmpty) {
                         return const Center(
@@ -591,157 +709,185 @@ class _HomePageState extends State<HomePage> {
                         );
                       }
 
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: filteredDocs.length,
-                        itemBuilder: (context, index) {
-                          final data = filteredDocs[index].data() as Map<String, dynamic>;
-                          final place = Place.fromMap(filteredDocs[index].id, data);
+                      return Column(
+                        children: [
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: filteredDocs.length + (_hasMore && searchQuery.isEmpty ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              
+                              if (index == filteredDocs.length) {
+                                return Shimmer.fromColors(
+                                  baseColor: Colors.grey[300]!,
+                                  highlightColor: Colors.grey[100]!,
+                                  child: Card(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                                    child: AspectRatio(
+                                      aspectRatio: 16 / 9,
+                                      child: Container(color: Colors.white),
+                                    ),
+                                  ),
+                                );
+                              }
 
-                          return GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => PlaceDetailPage(
-                                  place: place,
-                                  onAddToPlan: widget.onAddToPlan,
+                              final data = filteredDocs[index].data() as Map<String, dynamic>;
+                              final place = Place.fromMap(filteredDocs[index].id, data);
+
+                              return GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PlaceDetailPage(
+                                      place: place,
+                                      onAddToPlan: widget.onAddToPlan,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            child: Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Stack(
+                                child: Card(
+                                  margin: const EdgeInsets.only(bottom: 10), 
+                                  elevation: 0.5, 
+                                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero), 
+                                  color: Colors.white,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      ClipRRect(
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                        child: Image.network(
-                                          place.imageUrl,
-                                          height: 180,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          alignment: Alignment(0, place.imageAlignmentY), // <-- ดึงช่วงแสดงผลแนวตั้งมาใช้
-                                          errorBuilder: (c, e, s) => Container(
-                                            height: 180,
-                                            color: Colors.grey[300],
-                                            child: const Icon(Icons.image, size: 50),
-                                          ),
-                                        ),
-                                      ),
-                                      if ((place.imageUrls?.length ?? 0) > 1)
-                                        Positioned(
-                                          bottom: 8,
-                                          right: 8,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius: BorderRadius.circular(12),
+                                      Stack(
+                                        children: [
+                                          AspectRatio(
+                                            aspectRatio: 16 / 9,
+                                            child: Image.network(
+                                              place.imageUrl,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                              alignment: Alignment(0, place.imageAlignmentY),
+                                              cacheWidth: 1000, 
+                                              loadingBuilder: (context, child, loadingProgress) {
+                                                if (loadingProgress == null) return child;
+                                                return Shimmer.fromColors(
+                                                  baseColor: Colors.grey[300]!,
+                                                  highlightColor: Colors.grey[100]!,
+                                                  child: Container(color: Colors.white),
+                                                );
+                                              },
+                                              errorBuilder: (c, e, s) => Container(
+                                                color: Colors.grey[300],
+                                                child: const Icon(Icons.image, size: 50),
+                                              ),
                                             ),
-                                            child: Row(
+                                          ),
+                                          if ((place.imageUrls?.length ?? 0) > 1)
+                                            Positioned(
+                                              bottom: 12,
+                                              right: 12,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.photo_library, color: Colors.white, size: 14),
+                                                    const SizedBox(width: 5),
+                                                    Text(
+                                                      '${place.imageUrls!.length}',
+                                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          if (isAdmin)
+                                            Positioned(
+                                              top: 4,
+                                              right: 4,
+                                              child: PopupMenuButton<String>(
+                                                icon: const Icon(
+                                                  Icons.more_vert,
+                                                  color: Colors.white,
+                                                  size: 28,
+                                                  shadows: [Shadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 2))],
+                                                ),
+                                                onSelected: (value) {
+                                                  if (value == 'arrange_images') {
+                                                    _openArrangeImagesSheet(place);
+                                                  } else if (value == 'set_cover') {
+                                                    _openSelectCoverSheet(place);
+                                                  } else {
+                                                    _deletePlace(place.id, place.name);
+                                                  }
+                                                },
+                                                itemBuilder: (context) => [
+                                                  const PopupMenuItem(
+                                                    value: 'arrange_images',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.swap_vert, color: Colors.teal),
+                                                        SizedBox(width: 8),
+                                                        Text('ຈັດຕຳແໜ່ງຮູບພາບ'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const PopupMenuItem(
+                                                    value: 'set_cover',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.add_photo_alternate, color: Colors.blue),
+                                                        SizedBox(width: 8),
+                                                        Text('ຕັ້ງເປັນຮູບໜ້າປົກ'),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const PopupMenuItem(
+                                                    value: 'delete',
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(Icons.delete, color: Colors.red),
+                                                        SizedBox(width: 8),
+                                                        Text('ລົບ', style: TextStyle(color: Colors.red)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              place.name,
+                                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.3),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
                                               children: [
-                                                const Icon(Icons.photo_library, color: Colors.white, size: 12),
-                                                const SizedBox(width: 3),
+                                                const Icon(Icons.location_on, size: 15, color: Colors.redAccent),
+                                                const SizedBox(width: 4),
                                                 Text(
-                                                  '${place.imageUrls!.length}',
-                                                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                                                  place.district,
+                                                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
                                                 ),
                                               ],
                                             ),
-                                          ),
-                                        ),
-                                      if (isAdmin)
-                                        Positioned(
-                                          top: 4,
-                                          right: 4,
-                                          child: PopupMenuButton<String>(
-                                            icon: const Icon(
-                                              Icons.more_vert,
-                                              color: Colors.white,
-                                              size: 28,
-                                              shadows: [Shadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 2))],
-                                            ),
-                                            onSelected: (value) {
-                                              if (value == 'arrange_images') {
-                                                _openArrangeImagesSheet(place);
-                                              } else if (value == 'set_cover') {
-                                                _openSelectCoverSheet(place);
-                                              } else {
-                                                _deletePlace(place.id, place.name);
-                                              }
-                                            },
-                                            itemBuilder: (context) => [
-                                              const PopupMenuItem(
-                                                value: 'arrange_images',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.swap_vert, color: Colors.teal),
-                                                    SizedBox(width: 8),
-                                                    Text('ຈັດຕຳແໜ່ງຮູບພາບ'),
-                                                  ],
-                                                ),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'set_cover',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.add_photo_alternate, color: Colors.blue),
-                                                    SizedBox(width: 8),
-                                                    Text('ຕັ້ງເປັນຮູບໜ້າປົກ'),
-                                                  ],
-                                                ),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'delete',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.delete, color: Colors.red),
-                                                    SizedBox(width: 8),
-                                                    Text('ລົບ', style: TextStyle(color: Colors.red)),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          place.name,
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.location_on, size: 14, color: Colors.red),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              place.district,
-                                              style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                            ),
                                           ],
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
+                                ),
+                              );
+                            },
+                          ),   
+                        ],
+                      );    
                     },
-                  ),
+                  ),   
               ],
             ),
           ),
@@ -755,7 +901,7 @@ class _HomePageState extends State<HomePage> {
                     CircularProgressIndicator(color: Colors.teal),
                     SizedBox(height: 16),
                     Text(
-                      "ກຳລັງລົບຂໍ້ມູນທังໝົດ...",
+                      "ກຳລັງລົບຂໍ້ມູນທັງໝົດ...",
                       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     )
                   ],

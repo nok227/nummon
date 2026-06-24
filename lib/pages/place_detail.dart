@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../models/place_model.dart';
-import 'map.dart';
+import '../routes/map.dart';
 
 class PlaceDetailPage extends StatefulWidget {
   final Place place;
@@ -259,6 +259,109 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // ── ຈຸດທ່ອງທ່ຽວຍ່ອຍ (ມີຮູບ ແລະ ປັກໝຸດ ນຳທາງໄດ້ເຫมือนสถานที่หลัก) ──
+                  if (widget.place.extraPlaces != null &&
+                      widget.place.extraPlaces!.isNotEmpty) ...[
+                    const Text("ຂໍ້ມູນອື່ນໆ",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: widget.place.extraPlaces!.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final extra = widget.place.extraPlaces![index];
+                        final extraImages = extra.allImages;
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MapPage(
+                                  latitude: extra.latitude,
+                                  longitude: extra.longitude,
+                                  placeName: extra.name,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.horizontal(
+                                      left: Radius.circular(12)),
+                                  child: extraImages.isNotEmpty
+                                      ? Image.network(
+                                          extraImages.first,
+                                          width: 90,
+                                          height: 90,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => Container(
+                                            width: 90,
+                                            height: 90,
+                                            color: Colors.grey.shade200,
+                                            child: const Icon(Icons.broken_image,
+                                                color: Colors.grey),
+                                          ),
+                                        )
+                                      : Container(
+                                          width: 90,
+                                          height: 90,
+                                          color: Colors.grey.shade200,
+                                          child: const Icon(Icons.image_not_supported,
+                                              color: Colors.grey),
+                                        ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(extra.name,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold, fontSize: 15)),
+                                        const SizedBox(height: 4),
+                                        if (extra.description.isNotEmpty)
+                                          Text(
+                                            extra.description,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontSize: 13, color: Colors.grey),
+                                          ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: const [
+                                            Icon(Icons.directions, color: Colors.teal, size: 16),
+                                            SizedBox(width: 4),
+                                            Text('ນຳທາງໄປຈຸດນີ້',
+                                                style: TextStyle(
+                                                    color: Colors.teal,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
 
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
