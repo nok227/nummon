@@ -6,15 +6,16 @@ import 'pages/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: "AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs",
-      appId: "1:447844170700:android:351a8b0df679a0aef63b69",
-      messagingSenderId: "447844170700",
-      projectId: "my-app-7eb60",
-      storageBucket: "my-app-7eb60.firebasestorage.app",
-    ),
-  );
+  // await Firebase.initializeApp(
+  //   options: const FirebaseOptions(
+  //     apiKey: "AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs",
+  //     appId: "1:447844170700:android:351a8b0df679a0aef63b69",
+  //     messagingSenderId: "447844170700",
+  //     projectId: "my-app-7eb60",
+  //     storageBucket: "my-app-7eb60.firebasestorage.app",
+  //   ),
+  // );
+  await Firebase.initializeApp();
   runApp(const TravelApp());
 }
 

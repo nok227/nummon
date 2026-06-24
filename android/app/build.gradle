@@ -25,7 +25,7 @@ defaultConfig {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         
-        minSdk = 23 // 👈 แก้ไขเปลี่ยนเป็นเลข 23 ตรงนี้ได้เลยครับ
+        minSdkVersion = flutter.minSdkVersion // 👈 แก้ไขเปลี่ยนเป็นเลข 23 ตรงนี้ได้เลยครับ
         
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
