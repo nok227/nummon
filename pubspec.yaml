@@ -53,7 +53,8 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/images_4.jpg" # คุณต้องสร้างโฟลเดอร์นี้และใส่รูปภาพของคุณที่นี่
-  min_sdk_android: 21 # สำหรับ Android
-  adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images_4.jpg"
+  image_path: "assets/a.jpg" # สำหรับ iOS (ใช้รูปที่มีพื้นหลังปกติได้)
+  
+  # สำหรับ Android ปรับตรงนี้:
+  adaptive_icon_background: "#FFFFFF" # กำหนดสีพื้นหลังตรงนี้ (เช่น สีขาว)
+  adaptive_icon_foreground: "assets/a.jpg" # ใช้รูปโลโก้ที่เว้นขอบและโปร่งใส

@@ -29,7 +29,6 @@ Future<void> deleteFromCloudinary(String url, bool isVideo) async {
     List<String> publicIdSegments = [];
     for (int i = uploadIndex + 1; i < segments.length; i++) {
       if (RegExp(r'^v\d+$').hasMatch(segments[i])) continue; // ຂ້າມເວີຊັນ
-      // ຂ້າມ Transformations ຕ່າງໆທີ່ Cloudinary ສ້າງຂຶ້ນ
       if (segments[i].contains('so_') ||
           segments[i].contains('eo_') ||
           segments[i].contains('f_') ||
@@ -43,7 +42,6 @@ Future<void> deleteFromCloudinary(String url, bool isVideo) async {
     String publicIdWithExtension = publicIdSegments.join('/');
     String publicId = publicIdWithExtension;
 
-    // ຕັດນາມສະກຸນໄຟລ໌ອອກ
     if (publicIdWithExtension.contains('.')) {
       publicId = publicIdWithExtension.substring(
           0, publicIdWithExtension.lastIndexOf('.'));
@@ -82,7 +80,6 @@ Future<void> deleteFromCloudinary(String url, bool isVideo) async {
 // ---------------------------------------------------------
 // ສ່ວນສະແດງຜົນຫຼັກ
 // ---------------------------------------------------------
-
 class StorySection extends StatefulWidget {
   const StorySection({super.key});
 
@@ -98,6 +95,18 @@ class _StorySectionState extends State<StorySection> {
   void initState() {
     super.initState();
     _cleanupExpiredStories();
+  }
+
+  // ฟังก์ชันแปลง URL วิดีโอ Cloudinary ให้กลายเป็นภาพปกตรงกึ่งกลางวิดีโอ (so_50p) เพื่อทำเป็น Default Preview
+  String _getMiddleFrameThumbnail(String url) {
+    if (url.isEmpty) return url;
+    const marker = '/upload/';
+    final idx = url.indexOf(marker);
+    if (idx == -1) return url;
+
+    final insertPos = idx + marker.length;
+    String cleanUrl = url.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '.jpg');
+    return cleanUrl.substring(0, insertPos) + 'so_50p,f_auto,q_auto,vc_auto/' + cleanUrl.substring(insertPos);
   }
 
   Future<void> _cleanupExpiredStories() async {
@@ -255,7 +264,7 @@ class _StorySectionState extends State<StorySection> {
     }
   }
 
- Future<String> _uploadToCloudinary(
+  Future<String> _uploadToCloudinary(
     XFile file,
     bool isVideo, {
     double? startSeconds,
@@ -281,16 +290,11 @@ class _StorySectionState extends State<StorySection> {
       }
     }
 
-    // กำหนดประเภททรัพยากร
     final resourceType = isVideo ? "video" : "image";
     final uri = Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/$resourceType/upload");
     
     final request = http.MultipartRequest("POST", uri);
     request.fields['upload_preset'] = uploadPreset;
-
-    // 🚨 นำโค้ดส่วน eager และ eager_async ออกเพื่อป้องกัน Timeout จาก Cloudinary
-    // การครอบตัดวิดีโอ (Trim) จะถูกจัดการผ่านการแปลง URL ด้านล่างแทน 
-
     request.files.add(await http.MultipartFile.fromPath('file', fileToUpload.path));
     
     final response = await request.send();
@@ -300,7 +304,6 @@ class _StorySectionState extends State<StorySection> {
     }
 
     if (response.statusCode != 200) {
-      // 🌟 เพิ่มบรรทัดนี้เพื่อปริ้นท์ดูข้อผิดพลาดที่แท้จริงจาก Cloudinary
       final errorResponse = await response.stream.bytesToString();
       debugPrint("❌ Cloudinary Upload Error: $errorResponse");
       throw Exception("ອັບໂຫຼດລົ້ມເຫຼວ (Code: ${response.statusCode})");
@@ -310,7 +313,6 @@ class _StorySectionState extends State<StorySection> {
     final jsonMap = jsonDecode(String.fromCharCodes(responseData));
     String url = jsonMap['secure_url'];
 
-    // 🌟 จัดการตัดวิดีโอ (Trim) ด้วยการแก้ไข URL โดยตรง
     if (isVideo && startSeconds != null && endSeconds != null) {
       url = _applyVideoTrimTransformation(url, startSeconds, endSeconds);
     }
@@ -352,6 +354,8 @@ class _StorySectionState extends State<StorySection> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -370,6 +374,7 @@ class _StorySectionState extends State<StorySection> {
             builder: (context, snapshot) {
               List<Widget> storyWidgets = [];
 
+              // ปุ่มกดสร้างสตอรี่ของตัวเองชิ้นแรกสุด
               storyWidgets.add(
                 GestureDetector(
                   onTap: isUploadingStory ? null : _createNewStory,
@@ -471,10 +476,20 @@ class _StorySectionState extends State<StorySection> {
                   ));
                 });
 
+                // 🌟 ฟีเจอร์ที่ 1: ดึงกลุ่มสตอรี่ของตัวเอง ย้ายมาแสดงที่แถบแรกสุดเสมอ
+                if (currentUserId != null) {
+                  int myIndex = groups.indexWhere((g) => g.userId == currentUserId);
+                  if (myIndex != -1) {
+                    final myGroup = groups.removeAt(myIndex);
+                    groups.insert(0, myGroup);
+                  }
+                }
+
                 for (int i = 0; i < groups.length; i++) {
                   final group = groups[i];
                   final lastStory = group.stories.last;
                   final isVideo = lastStory['mediaType'] == 'video';
+                  final isMyStory = group.userId == currentUserId;
 
                   storyWidgets.add(
                     GestureDetector(
@@ -499,12 +514,23 @@ class _StorySectionState extends State<StorySection> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
                                 child: isVideo
-                                    ? Container(
-                                        color: Colors.black87,
-                                        child: const Icon(
-                                            Icons.play_circle_fill,
-                                            color: Colors.white,
-                                            size: 32))
+                                    ? Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          // 🌟 ฟีเจอร์ที่ 2: ดึงภาพจากกึ่งกลางวิดีโอ (so_50p) มาแสดงเป็นหน้าปกแทนจอดำ
+                                          Image.network(
+                                            _getMiddleFrameThumbnail(lastStory['storyImage'] ?? ''),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (c, e, s) => Container(color: Colors.black87),
+                                          ),
+                                          Container(color: Colors.black),
+                                          const Center(
+                                            child: Icon(Icons.play_circle_fill,
+                                                color: Colors.white,
+                                                size: 32),
+                                          ),
+                                        ],
+                                      )
                                     : Image.network(
                                         lastStory['storyImage'] ?? '',
                                         fit: BoxFit.cover,
@@ -529,16 +555,15 @@ class _StorySectionState extends State<StorySection> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: group.stories.length > 1
-                                          ? Colors.pinkAccent
-                                          : Colors.blueAccent,
+                                      color: isMyStory
+                                          ? Colors.greenAccent
+                                          : (group.stories.length > 1 ? Colors.pinkAccent : Colors.blueAccent),
                                       width: 2.5),
                                 ),
                                 child: CircleAvatar(
                                   radius: 16,
                                   backgroundColor: Colors.grey[200],
-                                  backgroundImage: (group
-                                              .userAvatar.isNotEmpty &&
+                                  backgroundImage: (group.userAvatar.isNotEmpty &&
                                           group.userAvatar.startsWith('http'))
                                       ? NetworkImage(group.userAvatar)
                                       : const AssetImage('assets/default.jpg')
@@ -550,7 +575,7 @@ class _StorySectionState extends State<StorySection> {
                               bottom: 8,
                               left: 8,
                               right: 8,
-                              child: Text(group.userName,
+                              child: Text(isMyStory ? "ສະຕໍຣີ່ຂອງທ່ານ" : group.userName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -595,7 +620,6 @@ class _StorySectionState extends State<StorySection> {
 // ---------------------------------------------------------
 // Classes ສໍາລັບจัดการ Viewer ของ Story
 // ---------------------------------------------------------
-
 class UserStoryGroup {
   final String userId;
   final String userName;
@@ -657,6 +681,11 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     final story = widget.storyGroups[currentGroupIdx].stories[currentStoryIdx];
     final isVideo = story['mediaType'] == 'video';
 
+    // 🌟 ฟีเจอร์ที่ 4: ลงชื่อประวัติการรับชมสตอรี่แบบอัตโนมัติลงคอลเลกชันย่อย 'viewers'
+    if (story['storyDocId'] != null) {
+      _recordStoryView(story['storyDocId'], story['userId']);
+    }
+
     if (isVideo) {
       _videoController = VideoPlayerController.networkUrl(
           Uri.parse(story['storyImage'] ?? ''));
@@ -674,6 +703,141 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     } else {
       _startImageTimer();
     }
+  }
+
+  // ฟังก์ชันลงทะเบียนการกดดูเข้าชม
+  Future<void> _recordStoryView(String storyId, String ownerId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid == ownerId) return; // ถ้าเป็นสตอรี่ของตัวเองไม่ต้องบันทึก
+
+    String name = user.displayName ?? "ນັກທ່ອງທ່ຽວ";
+    String avatar = user.photoURL ?? "";
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        name = userDoc.data()?['displayName'] ?? name;
+        avatar = userDoc.data()?['photoUrl'] ?? avatar;
+      }
+    } catch (_) {}
+
+    await FirebaseFirestore.instance
+        .collection('stories')
+        .doc(storyId)
+        .collection('viewers')
+        .doc(user.uid)
+        .set({
+      'userId': user.uid,
+      'userName': name,
+      'userAvatar': avatar,
+      'viewedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  // 🌟 ฟีเจอร์ที่ 3: ฟังก์ชันบันทึกการกดส่งความรู้สึกอีโมจิลงฐานข้อมูลคอลเลกชันย่อย
+  Future<void> _sendEmojiReaction(String storyId, String emoji) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    String name = user.displayName ?? "ນັກທ່ອງທ່ຽວ";
+    String avatar = user.photoURL ?? "";
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        name = userDoc.data()?['displayName'] ?? name;
+        avatar = userDoc.data()?['photoUrl'] ?? avatar;
+      }
+    } catch (_) {}
+
+    await FirebaseFirestore.instance
+        .collection('stories')
+        .doc(storyId)
+        .collection('viewers')
+        .doc(user.uid)
+        .set({
+      'userId': user.uid,
+      'userName': name,
+      'userAvatar': avatar,
+      'emoji': emoji,
+      'reactedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("ສົ່ງ $emoji ແລ້ວ! 🎉"),
+          duration: const Duration(milliseconds: 700),
+          behavior: SnackBarBehavior.floating,
+          width: 150,
+        ),
+      );
+    }
+  }
+
+  // 🌟 ฟีเจอร์ที่ 4: หน้าต่างแผง Bottom Sheet แสดงรายชื่อผู้ชมพร้อมอีโมจิที่พวกเขากด
+  void _showViewersListBottomSheet(String storyId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('stories')
+              .doc(storyId)
+              .collection('viewers')
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator(color: Colors.white));
+            }
+            final docs = snapshot.data!.docs;
+            if (docs.isEmpty) {
+              return const Center(child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text("ຍັງບໍ່ມີຄົນເບິ່ງເທື່ອ", style: TextStyle(color: Colors.white60)),
+              ));
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 12),
+                Text("ຄົນເບິ່ງທັງໝົດ (${docs.length})", style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                const Divider(color: Colors.white12),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      final data = docs[index].data() as Map<String, dynamic>;
+                      final name = data['userName'] ?? 'User';
+                      final avt = data['userAvatar'] ?? '';
+                      final emoji = data['emoji'] as String?;
+                      
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.grey[800],
+                          backgroundImage: (avt.isNotEmpty && avt.startsWith('http')) ? NetworkImage(avt) : const AssetImage('assets/default.jpg') as ImageProvider,
+                        ),
+                        title: Text(name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                        trailing: emoji != null 
+                            ? Text(emoji, style: const TextStyle(fontSize: 22)) 
+                            : const Text("ເບິ່ງແລ້ວ", style: TextStyle(color: Colors.white38, fontSize: 11)),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((_) {
+      // เล่นวิดีโอและเวลาต่อทันทีที่ปิดแผ่น BottomSheet
+      _showStory();
+    });
   }
 
   void _startImageTimer() {
@@ -825,18 +989,18 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          GestureDetector(
-            onTapUp: (details) {
-              final width = MediaQuery.of(context).size.width;
-              if (details.globalPosition.dx < width * 0.3) {
-                _prevStory();
-              } else {
-                _nextStory();
-              }
-            },
-            child: Center(
+      body: GestureDetector(
+        onTapUp: (details) {
+          final width = MediaQuery.of(context).size.width;
+          if (details.globalPosition.dx < width * 0.3) {
+            _prevStory();
+          } else {
+            _nextStory();
+          }
+        },
+        child: Stack(
+          children: [
+            Center(
               child: isVideo
                   ? (_videoController != null &&
                           _videoController!.value.isInitialized
@@ -851,96 +1015,174 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                       errorBuilder: (c, e, s) =>
                           const Icon(Icons.broken_image, color: Colors.white)),
             ),
-          ),
-          Positioned(
-            top: 50,
-            left: 16,
-            right: 16,
-            child: Column(
-              children: [
-                Row(
-                  children: List.generate(group.stories.length, (idx) {
-                    double p = 0.0;
-                    if (idx < currentStoryIdx)
-                      p = 1.0;
-                    else if (idx == currentStoryIdx) p = _progress;
-                    return Expanded(
-                      child: Container(
-                        height: 3,
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(2)),
-                        child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: p,
-                            child: Container(color: Colors.white)),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.grey[700],
-                          backgroundImage: (group.userAvatar.isNotEmpty &&
-                                  group.userAvatar.startsWith('http'))
-                              ? NetworkImage(group.userAvatar)
-                              : const AssetImage('assets/default.jpg')
-                                  as ImageProvider,
+            Positioned(
+              top: 50,
+              left: 16,
+              right: 16,
+              child: Column(
+                children: [
+                  Row(
+                    children: List.generate(group.stories.length, (idx) {
+                      double p = 0.0;
+                      if (idx < currentStoryIdx)
+                        p = 1.0;
+                      else if (idx == currentStoryIdx) p = _progress;
+                      return Expanded(
+                        child: Container(
+                          height: 3,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          decoration: BoxDecoration(
+                              color: Colors.white24,
+                              borderRadius: BorderRadius.circular(2)),
+                          child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: p,
+                              child: Container(color: Colors.white)),
                         ),
-                        const SizedBox(width: 10),
-                        Text(group.userName,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        if (isMyStory)
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert,
-                                color: Colors.white), // จุด 3 จุดแนวตั้ง
-                            color: Colors.grey[900], // สีพื้นหลังเมนู
-                            offset: const Offset(0, 40),
-                            onSelected: (value) {
-                              if (value == 'delete') {
-                                _deleteCurrentStory(story);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete, color: Colors.redAccent),
-                                    SizedBox(width: 8),
-                                    Text('ລົບສະຕໍຣີ່',
-                                        style:
-                                            TextStyle(color: Colors.redAccent)),
-                                  ],
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.grey[700],
+                            backgroundImage: (group.userAvatar.isNotEmpty &&
+                                    group.userAvatar.startsWith('http'))
+                                ? NetworkImage(group.userAvatar)
+                                : const AssetImage('assets/default.jpg')
+                                    as ImageProvider,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(isMyStory ? "ສະຕໍຣີ່ຂອງທ່ານ" : group.userName,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          if (isMyStory)
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert,
+                                  color: Colors.white),
+                              color: Colors.grey[900],
+                              offset: const Offset(0, 40),
+                              onSelected: (value) {
+                                if (value == 'delete') {
+                                  _deleteCurrentStory(story);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete, color: Colors.redAccent),
+                                      SizedBox(width: 8),
+                                      Text('ລົບສະຕໍຣີ່',
+                                          style:
+                                              TextStyle(color: Colors.redAccent)),
+                                    ],
+                                  ),
                                 ),
+                              ],
+                            ),
+                          IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              onPressed: () => Navigator.pop(context)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // 🌟 ส่วนควบคุมด้านล่าง (ปุ่มเช็คคนดู / แถบส่งอีโมจิฟีลลิ่ง Facebook)
+            Positioned(
+              bottom: 40,
+              left: 16,
+              right: 16,
+              child: isMyStory
+                  ? Center(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('stories')
+                            .doc(story['storyDocId'])
+                            .collection('viewers')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                          return ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black54,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: const BorderSide(color: Colors.white30),
                               ),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            ),
+                            icon: const Icon(Icons.visibility, size: 18, color: Colors.tealAccent),
+                            label: Text("ຄົນເບິ່ງ $count ຄົນ", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            onPressed: () {
+                              _timer?.cancel();
+                              _videoController?.pause();
+                              _showViewersListBottomSheet(story['storyDocId']);
+                            },
+                          );
+                        },
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(left: 8.0),
+                              child: Text("ສົ່ງຄຳເຫັນ...", style: TextStyle(color: Colors.white60, fontSize: 13)),
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildEmojiItem("👍", story['storyDocId']),
+                              _buildEmojiItem("❤️", story['storyDocId']),
+                              _buildEmojiItem("😂", story['storyDocId']),
+                              _buildEmojiItem("😮", story['storyDocId']),
+                              _buildEmojiItem("😢", story['storyDocId']),
                             ],
                           ),
-                        IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white),
-                            onPressed: () => Navigator.pop(context)),
-                      ],
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ],
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ตัววิดเจ็ตสำหรับสร้างปุ่มกดอีโมจิแต่ละตัว
+  Widget _buildEmojiItem(String emoji, String storyId) {
+    return GestureDetector(
+      onTap: () => _sendEmojiReaction(storyId, emoji),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(emoji, style: const TextStyle(fontSize: 24)),
       ),
     );
   }

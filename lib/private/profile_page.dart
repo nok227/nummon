@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'edit_profile_page.dart';
 import 'add_highlight_page.dart';
+import '../routes/map.dart'; // ✅ ดึงหน้าแผนที่เข้ามาใช้งาน
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -22,7 +23,6 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isUploading = false;
   final TextEditingController _editContentController = TextEditingController();
   
-  // ตัวดักฟังข้อมูลผู้ใช้งานแบบ Real-time
   StreamSubscription<DocumentSnapshot>? _userSubscription;
 
   @override
@@ -31,7 +31,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _listenToUserData();
   }
 
-  // ดึงข้อมูลผู้ใช้แบบ Real-time เพื่อให้ข้อมูลไฮไลต์และโปรไฟล์อัปเดตอัตโนมัติ
   void _listenToUserData() {
     user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -57,12 +56,11 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
-    _userSubscription?.cancel(); // คืน Memory ป้องกันข้อมูลรั่วไหล
+    _userSubscription?.cancel();
     _editContentController.dispose();
     super.dispose();
   }
 
-  // สำหรับดูรูปเดี่ยวๆ เช่น รูปโปรไฟล์ หรือ หน้าปก
   void _showImagePreview(String imageUrl, {String? title}) {
     showDialog(
       context: context,
@@ -175,7 +173,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text("ລົບໂພສຕ໌?"),
         content: const Text("ທ່ານຕ້ອງການລົບໂພສຕ໌ນີ້ແທ້ຫຼືບໍ່?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົກເລີກ")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົกເລີກ")),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -226,9 +224,9 @@ class _ProfilePageState extends State<ProfilePage> {
     final bio = userData!['bio'] ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.grey[200], // เปลี่ยนพื้นหลังหลักเป็นเทาอ่อนแบบ Facebook
+      backgroundColor: Colors.grey[200],
       appBar: AppBar(
-        title: const Text("ໂޕຣໄຟລ໌"),
+        title: const Text("ໂພຣໄຟລ໌"),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
@@ -280,7 +278,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       Positioned(
                         bottom: -50,
                         child: GestureDetector(
-                          onTap: () => _showImagePreview(photoUrl, title: "ຮູບໂປຣໄຟລ໌"),
+                          onTap: () => _showImagePreview(photoUrl, title: "ຮູບໂພຣໄຟລ໌"),
                           onLongPress: () {
                             Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
                           },
@@ -437,36 +435,64 @@ class _ProfilePageState extends State<ProfilePage> {
                               final data = completedPlaces[index].data() as Map<String, dynamic>;
                               final imageUrl = data['imageUrl'] ?? '';
                               final placeName = data['placeName'] ?? '';
-                              return Container(
-                                width: 100,
-                                margin: const EdgeInsets.only(right: 10),
-                                child: Column(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              width: 100, height: 100,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => Container(
+
+                              // 📍 ✅ แก้ไข: ระบบดึงพิกัดแบบปลอดภัย 100%
+                              double? pLat;
+                              double? pLng;
+                              if (data['location'] is GeoPoint) {
+                                pLat = (data['location'] as GeoPoint).latitude;
+                                pLng = (data['location'] as GeoPoint).longitude;
+                              } else {
+                                var latVal = data['latitude'] ?? data['lat'];
+                                var lngVal = data['longitude'] ?? data['lng'];
+                                if (latVal != null) pLat = double.tryParse(latVal.toString());
+                                if (lngVal != null) pLng = double.tryParse(lngVal.toString());
+                              }
+
+                              return InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => MapPage(
+                                        latitude: pLat,
+                                        longitude: pLng,
+                                        placeName: placeName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.only(right: 10),
+                                  child: Column(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: imageUrl.isNotEmpty
+                                            ? Image.network(
+                                                imageUrl,
+                                                width: 100, height: 100,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (c, e, s) => Container(
+                                                  width: 100, height: 100, color: Colors.grey[300],
+                                                  child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                                                ),
+                                              )
+                                            : Container(
                                                 width: 100, height: 100, color: Colors.grey[300],
-                                                child: const Icon(Icons.image_not_supported, color: Colors.grey),
+                                                child: const Icon(Icons.place, color: Colors.orange, size: 36),
                                               ),
-                                            )
-                                          : Container(
-                                              width: 100, height: 100, color: Colors.grey[300],
-                                              child: const Icon(Icons.place, color: Colors.orange, size: 36),
-                                            ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      placeName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        placeName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               );
                             },
@@ -479,7 +505,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 8),
 
-            // ─── โพสต์ที่แชร์ (สไตล์ Facebook) ───
+            // ─── โพสต์ที่แชร์ ───
             Container(
               color: Colors.white,
               width: double.infinity,
@@ -517,20 +543,32 @@ class _ProfilePageState extends State<ProfilePage> {
 
                       final title = data['title'] ?? ''; 
                       final content = data['content'] ?? '';
-                      final placeName = data['placeName'] ?? '';
+                      final placeName = data['placeName'] ?? data['locationName'] ?? '';
                       final images = (data['images'] as List?)?.map((e) => e.toString()).toList() ?? [];
                       final likedBy = List<String>.from(data['likedBy'] ?? []);
                       final likes = data['likes'] ?? 0;
                       final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
                       final isMine = data['userId'] == user!.uid;
 
+                      // 📍 ✅ แก้ไข: ระบบดึงพิกัดแบบปลอดภัย 100% สำหรับโพสต์ที่แชร์
+                      double? postLat;
+                      double? postLng;
+                      if (data['location'] is GeoPoint) {
+                        postLat = (data['location'] as GeoPoint).latitude;
+                        postLng = (data['location'] as GeoPoint).longitude;
+                      } else {
+                        var latVal = data['latitude'] ?? data['lat'];
+                        var lngVal = data['longitude'] ?? data['lng'];
+                        if (latVal != null) postLat = double.tryParse(latVal.toString());
+                        if (lngVal != null) postLng = double.tryParse(lngVal.toString());
+                      }
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        color: Colors.white, // ปรับการ์ดให้ชิดขอบและใช้พื้นสีขาวแบบ Facebook
+                        color: Colors.white, 
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Header: Avatar + Name + Time + 3 Dots
                             Padding(
                               padding: const EdgeInsets.fromLTRB(12, 12, 4, 8),
                               child: Row(
@@ -559,7 +597,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                       ],
                                     ),
                                   ),
-                                  // เมนู 3 จุดไข่ปลา
                                   if (isMine)
                                     PopupMenuButton<String>(
                                       icon: Icon(Icons.more_horiz, color: Colors.grey[600]),
@@ -597,28 +634,47 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
 
-                            // 📍 Place Name (ถ้ามี)
+                            // 📍 กดดูแผนที่จากชื่อสถานที่
                             if (placeName.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                                child: Text("📍 $placeName", style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.teal, fontSize: 13)),
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => MapPage(
+                                          latitude: postLat,
+                                          longitude: postLng,
+                                          placeName: placeName,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Text(
+                                    "📍 $placeName", 
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600, 
+                                      color: Colors.teal, 
+                                      fontSize: 13,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
                               ),
 
-                            // Post Title
                             if (title.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
                                 child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                               ),
 
-                            // Post Content (Text)
                             if (content.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                                 child: Text(content, style: const TextStyle(fontSize: 15, height: 1.3)),
                               ),
 
-                            // Post Images (แบบเลื่อนแนวนอนเต็มความกว้างขึน)
                             if (images.isNotEmpty)
                               Container(
                                 height: 260,
@@ -658,7 +714,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ),
                               ),
 
-                            // Likes Count Indicator Bar
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               child: Row(
@@ -676,7 +731,6 @@ class _ProfilePageState extends State<ProfilePage> {
                             
                             const Divider(height: 1, thickness: 0.5),
 
-                            // Bottom Actions Bar (Like Button เหมือน Facebook)
                             Row(
                               children: [
                                 Expanded(
@@ -731,7 +785,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-// ─── คลาสสำหรับดูรูปในโพสแบบเต็มจอ และ สามารถเลื่อนซ้าย-ขวาได้ ───
 class PostImageViewerPage extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
@@ -788,7 +841,7 @@ class _PostImageViewerPageState extends State<PostImageViewerPage> {
           });
         },
         itemBuilder: (context, index) {
-          return InteractiveViewer( // เพิ่มอนุญาตให้ซูมรูปเข้า-ออกได้
+          return InteractiveViewer( 
             minScale: 0.5,
             maxScale: 4.0,
             child: Center(
@@ -815,7 +868,6 @@ class _PostImageViewerPageState extends State<PostImageViewerPage> {
   }
 }
 
-// ─── Highlight Viewer Page ───
 class HighlightViewerPage extends StatefulWidget {
   final Map<String, dynamic> highlight;
   const HighlightViewerPage({super.key, required this.highlight});
