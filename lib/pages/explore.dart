@@ -5,7 +5,7 @@ import '../models/place_model.dart';
 import 'place_detail.dart';
 import '../routes/map.dart'; // 1. เพิ่มการ Import หน้าแผนที่ของคุณ เข้ามาใช้งาน
 
-class ExplorePage extends StatelessWidget {
+class ExplorePage extends StatefulWidget {
   final ScrollController scrollController;
   final Function(Place) onAddToPlan;
 
@@ -16,9 +16,100 @@ class ExplorePage extends StatelessWidget {
   });
 
   @override
+  State<ExplorePage> createState() => _ExplorePageState();
+}
+
+class _ExplorePageState extends State<ExplorePage> {
+  // ─── Pagination state ───
+  static const int _pageSize = 10;
+  final List<QueryDocumentSnapshot> _docs = [];
+  final Map<String, QueryDocumentSnapshot> _latestPerUser = {};
+  DocumentSnapshot? _lastDoc;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  bool _initialLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    widget.scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final ctrl = widget.scrollController;
+    if (ctrl.position.pixels >= ctrl.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+
+    Query query = FirebaseFirestore.instance
+        .collection('user_posts')
+        .orderBy('createdAt', descending: true)
+        .limit(_pageSize);
+
+    if (_lastDoc != null) {
+      query = query.startAfterDocument(_lastDoc!);
+    }
+
+    final snap = await query.get();
+    if (!mounted) return;
+
+    if (snap.docs.isEmpty) {
+      setState(() {
+        _hasMore = false;
+        _isLoading = false;
+        _initialLoaded = true;
+      });
+      return;
+    }
+
+    final newDocs = snap.docs;
+    _lastDoc = newDocs.last;
+
+    // เก็บเฉพาะโพสต์ล่าสุดของแต่ละ user
+    for (final doc in newDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final uid = data['userId'] as String? ?? '';
+      if (uid.isEmpty) continue;
+      if (!_latestPerUser.containsKey(uid)) {
+        _latestPerUser[uid] = doc;
+        _docs.add(doc);
+      }
+    }
+
+    setState(() {
+      _isLoading = false;
+      _initialLoaded = true;
+      if (snap.docs.length < _pageSize) _hasMore = false;
+    });
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _docs.clear();
+      _latestPerUser.clear();
+      _lastDoc = null;
+      _hasMore = true;
+      _initialLoaded = false;
+    });
+    await _loadMore();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
+      backgroundColor: const Color(0xFFEFF3F8),
       appBar: AppBar(
         title: const Text(
           'ສຳຫຼວດປະສົບການ',
@@ -28,60 +119,52 @@ class ExplorePage extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('user_posts')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-                child: CircularProgressIndicator(color: Colors.teal));
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.explore_off, size: 72, color: Colors.grey[400]),
-                  const SizedBox(height: 12),
-                  Text(
-                    "ຍັງບໍ່ມີໂພສຕ໌ໃດໃນຕອນນີ້",
-                    style: TextStyle(color: Colors.grey[500], fontSize: 16),
+      body: !_initialLoaded
+          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+          : _docs.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.explore_off, size: 72, color: Colors.grey[400]),
+                      const SizedBox(height: 12),
+                      Text(
+                        "ຍັງບໍ່ມີໂພສຕ໌ໃດໃນຕອນນີ້",
+                        style: TextStyle(color: Colors.grey[500], fontSize: 16),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }
-
-          final allDocs = snapshot.data!.docs;
-          final Map<String, QueryDocumentSnapshot> latestPerUser = {};
-          for (final doc in allDocs) {
-            final data = doc.data() as Map<String, dynamic>;
-            final uid = data['userId'] as String? ?? '';
-            if (uid.isEmpty) continue;
-            if (!latestPerUser.containsKey(uid)) {
-              latestPerUser[uid] = doc;
-            }
-          }
-          final userLatestPosts = latestPerUser.values.toList();
-
-          return ListView.builder(
-            controller: scrollController,
-            itemCount: userLatestPosts.length,
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            itemBuilder: (context, index) {
-              final doc = userLatestPosts[index];
-              final data = doc.data() as Map<String, dynamic>;
-              return _UserPostCard(
-                postData: data,
-                postId: doc.id,
-                onAddToPlan: onAddToPlan,
-              );
-            },
-          );
-        },
-      ),
+                )
+              : RefreshIndicator(
+                  color: Colors.teal,
+                  onRefresh: _refresh,
+                  child: ListView.builder(
+                    controller: widget.scrollController,
+                    // cacheExtent ป้องกันการ rebuild ขณะ scroll
+                    cacheExtent: 1200,
+                    addAutomaticKeepAlives: true,
+                    addRepaintBoundaries: true,
+                    itemCount: _docs.length + (_isLoading || _hasMore ? 1 : 0),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemBuilder: (context, index) {
+                      // แสดง loading spinner ที่ท้ายรายการ
+                      if (index == _docs.length) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(child: CircularProgressIndicator(color: Colors.teal, strokeWidth: 2)),
+                        );
+                      }
+                      final doc = _docs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      return _UserPostCard(
+                        key: ValueKey(doc.id),
+                        postData: data,
+                        postId: doc.id,
+                        onAddToPlan: widget.onAddToPlan,
+                      );
+                    },
+                  ),
+                ),
     );
   }
 }
@@ -241,17 +324,28 @@ Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
   );
 }
 
-// ─── การ์ดแสดงโพสต์ล่าสุด ───
-class _UserPostCard extends StatelessWidget {
+// ─── การ์ดแสดงโพสต์ล่าสุด (StatefulWidget + KeepAlive ป้องกัน rebuild) ───
+class _UserPostCard extends StatefulWidget {
   final Map<String, dynamic> postData;
   final String postId;
   final Function(Place) onAddToPlan;
 
   const _UserPostCard({
+    super.key,
     required this.postData,
     required this.postId,
     required this.onAddToPlan,
   });
+
+  @override
+  State<_UserPostCard> createState() => _UserPostCardState();
+}
+
+class _UserPostCardState extends State<_UserPostCard>
+    with AutomaticKeepAliveClientMixin {
+  // KeepAlive: ป้องกัน widget ถูก dispose เมื่อ scroll ออกนอกหน้าจอ
+  @override
+  bool get wantKeepAlive => true;
 
   String _formatTimeAgo(DateTime date) {
     final diff = DateTime.now().difference(date);
@@ -263,7 +357,7 @@ class _UserPostCard extends StatelessWidget {
 
   Future<void> _toggleLike(String currentUserId, List<String> likedBy) async {
     if (currentUserId.isEmpty) return;
-    final docRef = FirebaseFirestore.instance.collection('user_posts').doc(postId);
+    final docRef = FirebaseFirestore.instance.collection('user_posts').doc(widget.postId);
     if (likedBy.contains(currentUserId)) {
       await docRef.update({
         'likes': FieldValue.increment(-1),
@@ -279,7 +373,9 @@ class _UserPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // ต้องเรียกเสมอเมื่อใช้ AutomaticKeepAliveClientMixin
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final postData = widget.postData;
     final userName = postData['userName'] ?? 'ນັກທ່ອງທ່ຽວ';
     final userAvatar = postData['userAvatar'] ?? '';
     final userId = postData['userId'] ?? '';
@@ -290,8 +386,6 @@ class _UserPostCard extends StatelessWidget {
     final createdAt = (postData['createdAt'] as Timestamp?)?.toDate();
     final likedBy = List<String>.from(postData['likedBy'] ?? []);
     final likes = postData['likes'] ?? 0;
-
-    // ดึงพิกัดจากข้อมูลโพสต์หลักอย่างปลอดภัย
     final double? latitude = postData['latitude'] != null ? (postData['latitude'] as num).toDouble() : null;
     final double? longitude = postData['longitude'] != null ? (postData['longitude'] as num).toDouble() : null;
 
@@ -310,7 +404,7 @@ class _UserPostCard extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: onAddToPlan),
+                        builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: widget.onAddToPlan),
                       ),
                     );
                   },
@@ -335,7 +429,7 @@ class _UserPostCard extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: onAddToPlan),
+                              builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: widget.onAddToPlan),
                             ),
                           );
                         },
@@ -512,7 +606,7 @@ class UserAllPostsPage extends StatelessWidget {
         final highlights = userData['highlights'] ?? [];
 
         return Scaffold(
-          backgroundColor: const Color(0xFFF0F2F5),
+          backgroundColor: const Color(0xFFEFF3F8),
           appBar: AppBar(
             title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
             backgroundColor: Colors.teal,
@@ -525,6 +619,9 @@ class UserAllPostsPage extends StatelessWidget {
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, postsSnapshot) {
+              if (postsSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: Colors.teal));
+              }
               final posts = postsSnapshot.data?.docs ?? [];
 
               return CustomScrollView(
@@ -539,34 +636,46 @@ class UserAllPostsPage extends StatelessWidget {
                             clipBehavior: Clip.none,
                             alignment: Alignment.center,
                             children: [
-                              AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: Container(
-                                  color: Colors.grey[300],
-                                  child: coverUrl.isNotEmpty
-                                      ? Image.network(coverUrl, fit: BoxFit.cover, cacheWidth: 800)
-                                      : const Icon(Icons.image, size: 42, color: Colors.grey),
+                              // ─── Cover Photo: กดเพื่อดูแบบขยายได้ ───
+                              GestureDetector(
+                                onTap: coverUrl.isNotEmpty
+                                    ? () => _showImagePreview(context, [coverUrl], 0)
+                                    : null,
+                                child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: Container(
+                                    color: const Color(0xFFCFE8E5),
+                                    child: coverUrl.isNotEmpty
+                                        ? Image.network(coverUrl, fit: BoxFit.cover, cacheWidth: 800)
+                                        : const Icon(Icons.image, size: 42, color: Colors.teal),
+                                  ),
                                 ),
                               ),
+                              // ─── Profile Avatar: กดเพื่อดูแบบขยายได้ ───
                               Positioned(
                                 bottom: -50,
-                                child: Container(
-                                  width: 110,
-                                  height: 110,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white,
-                                    boxShadow: [
-                                      BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-                                    ]
-                                  ),
-                                  padding: const EdgeInsets.all(4),
+                                child: GestureDetector(
+                                  onTap: photoUrl.isNotEmpty
+                                      ? () => _showImagePreview(context, [photoUrl], 0)
+                                      : null,
                                   child: Container(
-                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.teal[100]),
-                                    child: ClipOval(
-                                      child: photoUrl.isNotEmpty
-                                          ? Image.network(photoUrl, fit: BoxFit.cover, cacheWidth: 250)
-                                          : Center(child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal))),
+                                    width: 110,
+                                    height: 110,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                      boxShadow: [
+                                        BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 4))
+                                      ]
+                                    ),
+                                    padding: const EdgeInsets.all(4),
+                                    child: Container(
+                                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.teal[100]),
+                                      child: ClipOval(
+                                        child: photoUrl.isNotEmpty
+                                            ? Image.network(photoUrl, fit: BoxFit.cover, cacheWidth: 250)
+                                            : Center(child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal))),
+                                      ),
                                     ),
                                   ),
                                 ),

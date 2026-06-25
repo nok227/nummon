@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     String email = _emailLoginController.text.trim();
     String password = _passwordLoginController.text.trim();
     if (email.isEmpty || password.isEmpty) {
-      _showSnackBar("กรุณากรอกข้อมูลให้ครบถ้วน");
+      _showSnackBar("ກະລຸນາປ້ອນຂໍ້ມູນໄຫ້ຄົບຖ້ວນ");
       return;
     }
     setState(() => _isLoading = true);
@@ -51,10 +51,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       } else {
         await _auth.signInWithEmailAndPassword(email: email, password: password);
       }
-      _showSnackBar("เข้าสู่ระบบสำเร็จ!");
+      _showSnackBar("ເຂົ້າສູ່ລະບົບສຳເລັດ!");
       // ไม่ต้องนำทางเพราะ StreamBuilder จะจัดการ
     } on FirebaseAuthException catch (e) {
-      _showSnackBar(e.message ?? "เกิดข้อผิดพลาด");
+      _showSnackBar(e.message ?? "ເກີດຂໍ້ຜິດພາດ");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -64,13 +64,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     String email = _emailRegisterController.text.trim();
     String password = _passwordRegisterController.text.trim();
     if (email.isEmpty || password.isEmpty) {
-      _showSnackBar("กรุณากรอกข้อมูล");
+      _showSnackBar("ກະລຸນາປ້ອນຂ້ມູນ");
       return;
     }
     setState(() => _isLoading = true);
     try {
       await _auth.createUserWithEmailAndPassword(email: email, password: password);
-      _showSnackBar("สมัครสมาชิกสำเร็จ! กรุณาเข้าสู่ระบบ");
+      _showSnackBar("ສະໝັກສະມາຊິສຳເລັດ");
       _emailRegisterController.clear();
       _passwordRegisterController.clear();
       _tabController.animateTo(0);
@@ -94,9 +94,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         idToken: auth.idToken,
       );
       await _auth.signInWithCredential(credential);
-      _showSnackBar("เข้าสู่ระบบด้วย Google สำเร็จ!");
+      _showSnackBar("ເຂົ້າລະບົບດ້ວຍ Google ສຳເລັດ!");
     } catch (e) {
-      _showSnackBar("Google Sign-In ล้มเหลว: $e");
+      _showSnackBar("Google Sign-In ລົ້ມເຫຼວ: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -107,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("ยินดีต้อนรับ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+        title: const Text("ຍຶນດີຕ້ອນຮັບ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           labelColor: Colors.teal,
           unselectedLabelColor: Colors.grey,
           indicatorColor: Colors.teal,
-          tabs: const [Tab(text: "เข้าสู่ระบบ"), Tab(text: "สมัครสมาชิก")],
+          tabs: const [Tab(text: "ເຂົົ້າສູ່ລະບົບ"), Tab(text: "ສະໝັກສະມາຊິກ")],
         ),
       ),
       body: _isLoading
@@ -132,25 +132,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       controller: _tabController,
                       children: [
                         Column(children: [
-                          TextField(controller: _emailLoginController, decoration: const InputDecoration(labelText: "อีเมล หรือ admin_app", prefixIcon: Icon(Icons.email))),
+                          TextField(controller: _emailLoginController, decoration: const InputDecoration(labelText: "ເມລ ຫຼື admin_app", prefixIcon: Icon(Icons.email))),
                           const SizedBox(height: 16),
-                          TextField(controller: _passwordLoginController, obscureText: true, decoration: const InputDecoration(labelText: "รหัสผ่าน", prefixIcon: Icon(Icons.lock))),
+                          TextField(controller: _passwordLoginController, obscureText: true, decoration: const InputDecoration(labelText: "ລະຫັດຜ່ານ", prefixIcon: Icon(Icons.lock))),
                           const SizedBox(height: 24),
                           SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _loginWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("เข้าสู่ระบบ", style: TextStyle(color: Colors.white)))),
                         ]),
                         Column(children: [
-                          TextField(controller: _emailRegisterController, decoration: const InputDecoration(labelText: "อีเมล", prefixIcon: Icon(Icons.mail_outline))),
+                          TextField(controller: _emailRegisterController, decoration: const InputDecoration(labelText: "ເມລ", prefixIcon: Icon(Icons.mail_outline))),
                           const SizedBox(height: 16),
-                          TextField(controller: _passwordRegisterController, obscureText: true, decoration: const InputDecoration(labelText: "รหัสผ่าน (6+ ตัว)", prefixIcon: Icon(Icons.lock_outline))),
+                          TextField(controller: _passwordRegisterController, obscureText: true, decoration: const InputDecoration(labelText: "ລະຫັດຜ່ານ (6+ ຕົວ)", prefixIcon: Icon(Icons.lock_outline))),
                           const SizedBox(height: 24),
-                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _registerWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("สมัครสมาชิก", style: TextStyle(color: Colors.white)))),
+                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _registerWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("ສະໝັກສະມາຊິກ", style: TextStyle(color: Colors.white)))),
                         ]),
                       ],
                     ),
                   ),
-                  const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("หรือดำเนินการต่อด้วย", style: TextStyle(color: Colors.grey))), Expanded(child: Divider())]),
+                  const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("ຫຼື ດຳເນີນກາຮຕໍ່ດ້ວຍ", style: TextStyle(color: Colors.grey))), Expanded(child: Divider())]),
                   const SizedBox(height: 20),
-                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(onPressed: _signInWithGoogle, icon: const Icon(Icons.g_mobiledata), label: const Text("ดำเนินการต่อด้วย Google", style: TextStyle(color: Colors.black87)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[100]))),
+                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(onPressed: _signInWithGoogle, icon: const Icon(Icons.g_mobiledata), label: const Text("ກຳເນີນການຕໍ່ດ້ວຍ Google", style: TextStyle(color: Colors.black)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[100]))),
                 ],
               ),
             ),
