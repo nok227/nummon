@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../pages/main_screen.dart'; // 🔹 import หน้า MainScreen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,14 +21,34 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   bool _isLoading = false;
 
+  // GoogleSignIn instance แบบเดียวตลอดทั้งแอพ
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _emailLoginController.dispose();
+    _passwordLoginController.dispose();
+    _emailRegisterController.dispose();
+    _passwordRegisterController.dispose();
+    super.dispose();
+  }
+
   void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // 🔹 ฟังก์ชันนำทางไปที่ MainScreen พร้อมเคลียร์ Stack
+  void _navigateToMainScreen() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const MainScreen()),
+    );
   }
 
   Future<void> _loginWithEmail() async {
@@ -52,7 +73,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         await _auth.signInWithEmailAndPassword(email: email, password: password);
       }
       _showSnackBar("ເຂົ້າສູ່ລະບົບສຳເລັດ!");
-      // ไม่ต้องนำทางเพราะ StreamBuilder จะจัดการ
+      // 🔹 หลัง login สำเร็จ ไปที่ MainScreen ทันที
+      _navigateToMainScreen();
     } on FirebaseAuthException catch (e) {
       _showSnackBar(e.message ?? "ເກີດຂໍ້ຜິດພາດ");
     } finally {
@@ -74,6 +96,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       _emailRegisterController.clear();
       _passwordRegisterController.clear();
       _tabController.animateTo(0);
+      // 🔹 หลังสมัครสำเร็จ อาจจะให้ไปหน้า Login หรือไป MainScreen เลยก็ได้
+      // แต่แนะนำให้ไปหน้า Login แล้วให้ผู้ใช้ Login ต่อ
+      // ไม่ต้องนำทางอัตโนมัติ
     } catch (e) {
       _showSnackBar(e.toString());
     } finally {
@@ -84,17 +109,26 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      await googleSignIn.signOut();
-      final account = await googleSignIn.signIn();
-      if (account == null) return;
+      // เคลียร์ session เก่า
+      await _googleSignIn.signOut();
+
+      final account = await _googleSignIn.signIn();
+      if (account == null) {
+        // ผู้ใช้ยกเลิก
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
       final auth = await account.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: auth.accessToken,
         idToken: auth.idToken,
       );
+
       await _auth.signInWithCredential(credential);
       _showSnackBar("ເຂົ້າລະບົບດ້ວຍ Google ສຳເລັດ!");
+      // 🔹 หลัง login สำเร็จ ไปที่ MainScreen ทันที
+      _navigateToMainScreen();
     } catch (e) {
       _showSnackBar("Google Sign-In ລົ້ມເຫຼວ: $e");
     } finally {
@@ -116,7 +150,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           labelColor: Colors.teal,
           unselectedLabelColor: Colors.grey,
           indicatorColor: Colors.teal,
-          tabs: const [Tab(text: "ເຂົົ້າສູ່ລະບົບ"), Tab(text: "ສະໝັກສະມາຊິກ")],
+          tabs: const [
+            Tab(text: "ເຂົົ້າສູ່ລະບົບ"),
+            Tab(text: "ສະໝັກສະມາຊິກ"),
+          ],
         ),
       ),
       body: _isLoading
@@ -131,26 +168,100 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     child: TabBarView(
                       controller: _tabController,
                       children: [
+                        // Tab Login
                         Column(children: [
-                          TextField(controller: _emailLoginController, decoration: const InputDecoration(labelText: "ເມລ ຫຼື admin_app", prefixIcon: Icon(Icons.email))),
+                          TextField(
+                            controller: _emailLoginController,
+                            decoration: const InputDecoration(
+                              labelText: "ເມລ ຫຼື admin_app",
+                              prefixIcon: Icon(Icons.email),
+                            ),
+                          ),
                           const SizedBox(height: 16),
-                          TextField(controller: _passwordLoginController, obscureText: true, decoration: const InputDecoration(labelText: "ລະຫັດຜ່ານ", prefixIcon: Icon(Icons.lock))),
+                          TextField(
+                            controller: _passwordLoginController,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: "ລະຫັດຜ່ານ",
+                              prefixIcon: Icon(Icons.lock),
+                            ),
+                          ),
                           const SizedBox(height: 24),
-                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _loginWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("เข้าสู่ระบบ", style: TextStyle(color: Colors.white)))),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _loginWithEmail,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text("ເຂົ້າສູ່ລະບົບ"),
+                            ),
+                          ),
                         ]),
+                        // Tab Register
                         Column(children: [
-                          TextField(controller: _emailRegisterController, decoration: const InputDecoration(labelText: "ເມລ", prefixIcon: Icon(Icons.mail_outline))),
+                          TextField(
+                            controller: _emailRegisterController,
+                            decoration: const InputDecoration(
+                              labelText: "ເມລ",
+                              prefixIcon: Icon(Icons.mail_outline),
+                            ),
+                          ),
                           const SizedBox(height: 16),
-                          TextField(controller: _passwordRegisterController, obscureText: true, decoration: const InputDecoration(labelText: "ລະຫັດຜ່ານ (6+ ຕົວ)", prefixIcon: Icon(Icons.lock_outline))),
+                          TextField(
+                            controller: _passwordRegisterController,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: "ລະຫັດຜ່ານ (6+ ຕົວ)",
+                              prefixIcon: Icon(Icons.lock_outline),
+                            ),
+                          ),
                           const SizedBox(height: 24),
-                          SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _registerWithEmail, style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), child: const Text("ສະໝັກສະມາຊິກ", style: TextStyle(color: Colors.white)))),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _registerWithEmail,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text("ສະໝັກສະມາຊິກ"),
+                            ),
+                          ),
                         ]),
                       ],
                     ),
                   ),
-                  const Row(children: [Expanded(child: Divider()), Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("ຫຼື ດຳເນີນກາຮຕໍ່ດ້ວຍ", style: TextStyle(color: Colors.grey))), Expanded(child: Divider())]),
+                  const Row(
+                    children: [
+                      Expanded(child: Divider()),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text("ຫຼື ດຳເນີນກາຮຕໍ່ດ້ວຍ", style: TextStyle(color: Colors.grey)),
+                      ),
+                      Expanded(child: Divider()),
+                    ],
+                  ),
                   const SizedBox(height: 20),
-                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton.icon(onPressed: _signInWithGoogle, icon: const Icon(Icons.g_mobiledata), label: const Text("ກຳເນີນການຕໍ່ດ້ວຍ Google", style: TextStyle(color: Colors.black)), style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[100]))),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: _signInWithGoogle,
+                      icon: const Icon(Icons.g_mobiledata),
+                      label: const Text(
+                        "ກຳເນີນການຕໍ່ດ້ວຍ Google",
+                        style: TextStyle(color: Colors.black),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[100],
+                        foregroundColor: Colors.black,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

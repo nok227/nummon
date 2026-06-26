@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/place_model.dart';
 import 'place_detail.dart';
-import '../routes/map.dart'; // 1. เพิ่มการ Import หน้าแผนที่ของคุณ เข้ามาใช้งาน
+import '../routes/map.dart';
 
 class ExplorePage extends StatefulWidget {
   final ScrollController scrollController;
@@ -20,7 +20,6 @@ class ExplorePage extends StatefulWidget {
 }
 
 class _ExplorePageState extends State<ExplorePage> {
-  // ─── Pagination state ───
   static const int _pageSize = 10;
   final List<QueryDocumentSnapshot> _docs = [];
   final Map<String, QueryDocumentSnapshot> _latestPerUser = {};
@@ -77,7 +76,6 @@ class _ExplorePageState extends State<ExplorePage> {
     final newDocs = snap.docs;
     _lastDoc = newDocs.last;
 
-    // เก็บเฉพาะโพสต์ล่าสุดของแต่ละ user
     for (final doc in newDocs) {
       final data = doc.data() as Map<String, dynamic>;
       final uid = data['userId'] as String? ?? '';
@@ -140,14 +138,12 @@ class _ExplorePageState extends State<ExplorePage> {
                   onRefresh: _refresh,
                   child: ListView.builder(
                     controller: widget.scrollController,
-                    // cacheExtent ป้องกันการ rebuild ขณะ scroll
                     cacheExtent: 1200,
                     addAutomaticKeepAlives: true,
                     addRepaintBoundaries: true,
                     itemCount: _docs.length + (_isLoading || _hasMore ? 1 : 0),
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemBuilder: (context, index) {
-                      // แสดง loading spinner ที่ท้ายรายการ
                       if (index == _docs.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
@@ -169,7 +165,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 }
 
-// ─── ฟังก์ชันเปิดสไลด์ดูรูปภาพเต็มจอ (Fullscreen Preview) ───
+// ─── ฟังก์ชันเปิดดูรูปภาพเต็มจอ ───
 void _showImagePreview(BuildContext context, List<String> images, int initialIndex) {
   final PageController pageController = PageController(initialPage: initialIndex);
   showDialog(
@@ -179,7 +175,7 @@ void _showImagePreview(BuildContext context, List<String> images, int initialInd
       return StatefulBuilder(
         builder: (context, setState) {
           return Dialog(
-            backgroundColor: Colors.black, 
+            backgroundColor: Colors.black,
             insetPadding: EdgeInsets.zero,
             child: Stack(
               children: [
@@ -192,7 +188,7 @@ void _showImagePreview(BuildContext context, List<String> images, int initialInd
                       onPageChanged: (index) => setState(() => currentIndex = index),
                       itemBuilder: (context, i) {
                         return InteractiveViewer(
-                          maxScale: 4.0, 
+                          maxScale: 4.0,
                           child: Image.network(images[i], fit: BoxFit.contain),
                         );
                       },
@@ -227,7 +223,7 @@ void _showImagePreview(BuildContext context, List<String> images, int initialInd
   );
 }
 
-// ─── คอมโพเนนต์ Image Grid ───
+// ─── Image Grid ───
 Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
   if (images.isEmpty) return const SizedBox.shrink();
 
@@ -324,7 +320,7 @@ Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
   );
 }
 
-// ─── การ์ดแสดงโพสต์ล่าสุด (StatefulWidget + KeepAlive ป้องกัน rebuild) ───
+// ─── การ์ดโพสต์ (พร้อม KeepAlive) ───
 class _UserPostCard extends StatefulWidget {
   final Map<String, dynamic> postData;
   final String postId;
@@ -341,9 +337,7 @@ class _UserPostCard extends StatefulWidget {
   State<_UserPostCard> createState() => _UserPostCardState();
 }
 
-class _UserPostCardState extends State<_UserPostCard>
-    with AutomaticKeepAliveClientMixin {
-  // KeepAlive: ป้องกัน widget ถูก dispose เมื่อ scroll ออกนอกหน้าจอ
+class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -371,9 +365,24 @@ class _UserPostCardState extends State<_UserPostCard>
     }
   }
 
+  // 🔧 ฟังก์ชันช่วยอ่านพิกัดจาก postData
+  (double? lat, double? lng) _extractLatLng(Map<String, dynamic> data) {
+    if (data['location'] is GeoPoint) {
+      final geo = data['location'] as GeoPoint;
+      return (geo.latitude, geo.longitude);
+    }
+    double? lat;
+    double? lng;
+    if (data['latitude'] != null) lat = (data['latitude'] as num).toDouble();
+    if (data['longitude'] != null) lng = (data['longitude'] as num).toDouble();
+    if (lat == null && data['lat'] != null) lat = (data['lat'] as num).toDouble();
+    if (lng == null && data['lng'] != null) lng = (data['lng'] as num).toDouble();
+    return (lat, lng);
+  }
+
   @override
   Widget build(BuildContext context) {
-    super.build(context); // ต้องเรียกเสมอเมื่อใช้ AutomaticKeepAliveClientMixin
+    super.build(context);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
     final postData = widget.postData;
     final userName = postData['userName'] ?? 'ນັກທ່ອງທ່ຽວ';
@@ -386,8 +395,9 @@ class _UserPostCardState extends State<_UserPostCard>
     final createdAt = (postData['createdAt'] as Timestamp?)?.toDate();
     final likedBy = List<String>.from(postData['likedBy'] ?? []);
     final likes = postData['likes'] ?? 0;
-    final double? latitude = postData['latitude'] != null ? (postData['latitude'] as num).toDouble() : null;
-    final double? longitude = postData['longitude'] != null ? (postData['longitude'] as num).toDouble() : null;
+
+    // 🔧 ใช้ฟังก์ชันดึงพิกัด
+    final (latitude, longitude) = _extractLatLng(postData);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -442,7 +452,6 @@ class _UserPostCardState extends State<_UserPostCard>
                             const SizedBox(width: 4),
                             Icon(Icons.public, size: 12, color: Colors.grey[600]),
                           ],
-                          // ─── แก้ไขให้กดชื่อสถานที่ในฟีดเพื่อลิงก์ไปหน้าคำนวณเส้นทางได้ ───
                           if (placeName.isNotEmpty) ...[
                             const SizedBox(width: 6),
                             const Text('•', style: TextStyle(color: Colors.grey, fontSize: 12)),
@@ -466,12 +475,12 @@ class _UserPostCardState extends State<_UserPostCard>
                                   const Icon(Icons.location_on, size: 12, color: Colors.teal),
                                   const SizedBox(width: 2),
                                   Text(
-                                    placeName, 
+                                    placeName,
                                     style: const TextStyle(
-                                      fontSize: 12, 
-                                      color: Colors.teal, 
+                                      fontSize: 12,
+                                      color: Colors.teal,
                                       fontWeight: FontWeight.w500,
-                                      decoration: TextDecoration.underline, // ขีดเส้นใต้เพื่อให้รู้ว่ากดได้
+                                      decoration: TextDecoration.underline,
                                     ),
                                   ),
                                 ],
@@ -552,7 +561,7 @@ class _UserPostCardState extends State<_UserPostCard>
   }
 }
 
-// ─── หน้าโปรไฟล์ (Read-Only) ───
+// ─── หน้า UserAllPostsPage (โปรไฟล์ของคนอื่น) ───
 class UserAllPostsPage extends StatelessWidget {
   final String userId;
   final Function(Place) onAddToPlan;
@@ -568,7 +577,7 @@ class UserAllPostsPage extends StatelessWidget {
     if (diff.inDays > 0) return '${diff.inDays} ວັນກ່ອນ';
     if (diff.inHours > 0) return '${diff.inHours} ຊົ່ວໂມງກ່ອນ';
     if (diff.inMinutes > 0) return '${diff.inMinutes} ນາທີກ່ອນ';
-    return 'ບໍ່ດົນມานີ້';
+    return 'ບໍ່ດົນມານີ້';
   }
 
   Future<void> _toggleLike(String postId, List<String> likedBy, String currentUserId) async {
@@ -585,6 +594,21 @@ class UserAllPostsPage extends StatelessWidget {
         'likedBy': FieldValue.arrayUnion([currentUserId]),
       });
     }
+  }
+
+  // 🔧 ฟังก์ชันช่วยอ่านพิกัด
+  (double? lat, double? lng) _extractLatLng(Map<String, dynamic> data) {
+    if (data['location'] is GeoPoint) {
+      final geo = data['location'] as GeoPoint;
+      return (geo.latitude, geo.longitude);
+    }
+    double? lat;
+    double? lng;
+    if (data['latitude'] != null) lat = (data['latitude'] as num).toDouble();
+    if (data['longitude'] != null) lng = (data['longitude'] as num).toDouble();
+    if (lat == null && data['lat'] != null) lat = (data['lat'] as num).toDouble();
+    if (lng == null && data['lng'] != null) lng = (data['lng'] as num).toDouble();
+    return (lat, lng);
   }
 
   @override
@@ -636,7 +660,6 @@ class UserAllPostsPage extends StatelessWidget {
                             clipBehavior: Clip.none,
                             alignment: Alignment.center,
                             children: [
-                              // ─── Cover Photo: กดเพื่อดูแบบขยายได้ ───
                               GestureDetector(
                                 onTap: coverUrl.isNotEmpty
                                     ? () => _showImagePreview(context, [coverUrl], 0)
@@ -651,7 +674,6 @@ class UserAllPostsPage extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              // ─── Profile Avatar: กดเพื่อดูแบบขยายได้ ───
                               Positioned(
                                 bottom: -50,
                                 child: GestureDetector(
@@ -733,7 +755,7 @@ class UserAllPostsPage extends StatelessWidget {
                     ),
                   if (highlights.isNotEmpty) const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-                  // ─── แก้ไขส่วน: สถานที่ท่องเที่ยวสำเร็จแล้ว ให้คลิกแล้วคำนวณเส้นทางได้เลย ───
+                  // ─── Completed Places ───
                   SliverToBoxAdapter(
                     child: Container(
                       color: Colors.white,
@@ -771,10 +793,16 @@ class UserAllPostsPage extends StatelessWidget {
                                     final data = completedPlaces[index].data() as Map<String, dynamic>;
                                     final imageUrl = data['imageUrl'] ?? '';
                                     final pName = data['placeName'] ?? '';
-                                    
-                                    // ดึงพิกัด latitude/longitude ของแผนการเดินทางที่สำเร็จแล้ว
-                                    final double? pLat = data['latitude'] != null ? (data['latitude'] as num).toDouble() : null;
-                                    final double? pLng = data['longitude'] != null ? (data['longitude'] as num).toDouble() : null;
+
+                                    double? pLat;
+                                    double? pLng;
+                                    if (data['location'] is GeoPoint) {
+                                      pLat = (data['location'] as GeoPoint).latitude;
+                                      pLng = (data['location'] as GeoPoint).longitude;
+                                    } else {
+                                      if (data['latitude'] != null) pLat = (data['latitude'] as num).toDouble();
+                                      if (data['longitude'] != null) pLng = (data['longitude'] as num).toDouble();
+                                    }
 
                                     return InkWell(
                                       onTap: () {
@@ -817,7 +845,7 @@ class UserAllPostsPage extends StatelessWidget {
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-                  // รายการโพสต์ส่วนตัวในหน้าโปรไฟล์
+                  // ─── Posts ───
                   posts.isEmpty
                       ? const SliverFillRemaining(
                           child: Center(child: Text('ຍັງບໍ່ມີໂພສຕ໌', style: TextStyle(color: Colors.grey))),
@@ -835,9 +863,7 @@ class UserAllPostsPage extends StatelessWidget {
                               final likedBy = List<String>.from(data['likedBy'] ?? []);
                               final likes = data['likes'] ?? 0;
 
-                              // ดึงพิกัดจากข้อมูลโพสต์ในหน้าโปรไฟล์
-                              final double? postLat = data['latitude'] != null ? (data['latitude'] as num).toDouble() : null;
-                              final double? postLng = data['longitude'] != null ? (data['longitude'] as num).toDouble() : null;
+                              final (postLat, postLng) = _extractLatLng(data);
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 8),
@@ -877,7 +903,6 @@ class UserAllPostsPage extends StatelessWidget {
                                               ],
                                             ),
                                           ),
-                                          // ─── แก้ไขส่วนป้ายแท็กสถานที่ในโพสต์ ให้กดเปิดแผนที่ได้ ───
                                           if (placeName.isNotEmpty)
                                             InkWell(
                                               onTap: () {

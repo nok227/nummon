@@ -1,10 +1,72 @@
 import 'dart:async';
-import 'dart:convert'; // ເພີ່ມສຳລັບແປງ JSON
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http; // ໃຊ້ສຳລັບ Call API ຄຳນວນເສັ້ນທາງ
+import 'package:http/http.dart' as http;
+
+// ── ປະເພດ Map Layer ──
+enum MapLayerType { normal, satellite, terrain, hybrid }
+
+extension MapLayerExtension on MapLayerType {
+  String get label {
+    switch (this) {
+      case MapLayerType.normal:
+        return 'ປົກກະຕິ';
+      case MapLayerType.satellite:
+        return 'ດາວທຽມ';
+      case MapLayerType.terrain:
+        return 'ພູດອຍ';
+      case MapLayerType.hybrid:
+        return 'ປະສົມ';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case MapLayerType.normal:
+        return Icons.map_outlined;
+      case MapLayerType.satellite:
+        return Icons.satellite_alt;
+      case MapLayerType.terrain:
+        return Icons.terrain;
+      case MapLayerType.hybrid:
+        return Icons.layers;
+    }
+  }
+
+  String get tileUrl {
+    switch (this) {
+      case MapLayerType.normal:
+        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+      case MapLayerType.satellite:
+      case MapLayerType.hybrid:
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case MapLayerType.terrain:
+        return 'https://tile.opentopomap.org/{z}/{x}/{y}.png';
+    }
+  }
+
+  String? get overlayUrl {
+    if (this == MapLayerType.hybrid) {
+      return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+    return null;
+  }
+
+  String get attribution {
+    switch (this) {
+      case MapLayerType.normal:
+        return 'OpenStreetMap contributors';
+      case MapLayerType.satellite:
+      case MapLayerType.hybrid:
+        return 'Esri, DigitalGlobe, GeoEye | OSM contributors';
+      case MapLayerType.terrain:
+        return 'OpenTopoMap | OSM contributors';
+    }
+  }
+}
 
 class MapPage extends StatefulWidget {
   final double? latitude;
@@ -23,11 +85,13 @@ class _MapPageState extends State<MapPage> {
 
   ll.LatLng? _currentLocation;
   bool _showInfo = false;
-  
-  // ── ຕົວແປເພີ່ມເຕີມສຳລັບລະບົບນຳທາງ ──
-  List<ll.LatLng> _routePoints = []; // ເກັບຈຸດພິກັດເພື່ອແຕ້ມເສັ້ນທາງ
+
+  MapLayerType _currentLayer = MapLayerType.normal;
+  bool _showLayerPanel = false;
+
+  List<ll.LatLng> _routePoints = [];
   bool _isLoadingRoute = false;
-  StreamSubscription<Position>? _positionStreamSubscription; // ສຳລັບຕິດຕາມ GPS Real-time
+  StreamSubscription<Position>? _positionStreamSubscription;
 
   bool get _hasPlace => widget.latitude != null && widget.longitude != null;
   ll.LatLng get _placeLatLng => ll.LatLng(
@@ -44,21 +108,20 @@ class _MapPageState extends State<MapPage> {
       });
     }
     _initLocation().then((_) {
-      // ຖ້າມີສະຖານທີ່ປາຍທາງ ໃຫ້ຄຳນວນເສັ້ນທາງທັນທີຫຼັງຈາກໄດ້ GPS ປັດຈຸບັນ
+      // ถ้ามีพิกัดและได้ตำแหน่งแล้ว ให้คำนวณเส้นทาง
       if (_hasPlace && _currentLocation != null) {
         _calculateRoute();
       }
     });
-    _startLocationTracking(); // ເລີ່ມຕິດຕາມຕຳແໜ່ງຜູ້ໃຊ້ແບບ Real-time
+    _startLocationTracking();
   }
 
   @override
   void dispose() {
-    _positionStreamSubscription?.cancel(); // ຍົກເລີກການຕິດຕາມ GPS ເມື່ອອອກຈາກໜ້າ
+    _positionStreamSubscription?.cancel();
     super.dispose();
   }
 
-  // ── ຂໍສິດ ແລະ ດຶງຕຳແໜ່ງປັດຈຸບັນຄັ້ງທຳອິດ ──
   Future<void> _initLocation() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -75,41 +138,42 @@ class _MapPageState extends State<MapPage> {
       setState(() {
         _currentLocation = ll.LatLng(pos.latitude, pos.longitude);
       });
+      // ถ้ามีพิกัดและเพิ่งได้ตำแหน่ง ให้คำนวณเส้นทาง
+      if (_hasPlace && mounted) {
+        _calculateRoute();
+      }
     } catch (e) {
       debugPrint('GPS Error: $e');
     }
   }
 
-  // ── ຕິດຕາມຕຳແໜ່ງຜູ້ໃຊ້ແບບເຄື່ອນທີ່ (Real-time Tracking) ──
   void _startLocationTracking() {
     _positionStreamSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // ອັບເດດທຸກໆການເຄື່ອນທີ່ 10 ແມັດ
+        distanceFilter: 10,
       ),
     ).listen((Position position) {
       if (mounted) {
         setState(() {
           _currentLocation = ll.LatLng(position.latitude, position.longitude);
         });
-        // ສາມາດໃສ່ຟັງຊັນຄຳນວນເສັ້ນທາງໃໝ່ໄດ້ຖ້າຜູ້ໃຊ້ຂັບລົດອອກນອກເສັ້ນທາງ
+        // 🔁 เมื่อตำแหน่งเปลี่ยนแปลง ให้คำนวณเส้นทางใหม่ (ถ้ามีสถานที่)
+        if (_hasPlace && mounted) {
+          _calculateRoute();
+        }
       }
     });
   }
 
-  // ── ຟັງຊັນ Call API OSRM ເພື່ອຄຳນວນເສັ້ນທາງ ──
   Future<void> _calculateRoute() async {
     if (_currentLocation == null || !_hasPlace) return;
-
     setState(() => _isLoadingRoute = true);
 
-    // OSRM ຮອງຮັບ Format: {longitude},{latitude};{longitude},{latitude}
-    final url = Uri.parse(
-        'https://router.project-osrm.org/route/v1/driving/'
+    final url = Uri.parse('https://router.project-osrm.org/route/v1/driving/'
         '${_currentLocation!.longitude},${_currentLocation!.latitude};'
         '${_placeLatLng.longitude},${_placeLatLng.latitude}'
-        '?overview=full&geometries=geojson'
-    );
+        '?overview=full&geometries=geojson');
 
     try {
       final response = await http.get(url);
@@ -117,15 +181,12 @@ class _MapPageState extends State<MapPage> {
         final data = jsonDecode(response.body);
         if (data['routes'] != null && data['routes'].isNotEmpty) {
           final List coordinates = data['routes'][0]['geometry']['coordinates'];
-          
           setState(() {
             _routePoints = coordinates
                 .map((coord) => ll.LatLng(coord[1].toDouble(), coord[0].toDouble()))
                 .toList();
           });
         }
-      } else {
-        throw Exception('ຄຳນວນເສັ້ນທາງບໍ່ສຳເລັດ');
       }
     } catch (e) {
       debugPrint('Routing Error: $e');
@@ -145,8 +206,71 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  Widget _buildLayerPanel() {
+    return Positioned(
+      right: 16,
+      bottom: 200,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: _showLayerPanel
+            ? Card(
+                key: const ValueKey('panel'),
+                elevation: 8,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: MapLayerType.values.map((layer) {
+                      final selected = _currentLayer == layer;
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _currentLayer = layer;
+                            _showLayerPanel = false;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected ? Colors.teal.withOpacity(0.15) : null,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(layer.icon, size: 20, color: selected ? Colors.teal : Colors.black54),
+                              const SizedBox(width: 8),
+                              Text(
+                                layer.label,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                  color: selected ? Colors.teal : Colors.black87,
+                                ),
+                              ),
+                              if (selected) ...[
+                                const SizedBox(width: 6),
+                                const Icon(Icons.check, size: 16, color: Colors.teal),
+                              ]
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(key: ValueKey('hidden')),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final layer = _currentLayer;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -165,15 +289,27 @@ class _MapPageState extends State<MapPage> {
               initialZoom: _hasPlace ? 14 : 10,
               onTap: (_, __) {
                 if (_showInfo) setState(() => _showInfo = false);
+                if (_showLayerPanel) setState(() => _showLayerPanel = false);
               },
             ),
             children: [
+              // ── Base Tile Layer ──
               TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: layer.tileUrl,
                 userAgentPackageName: 'com.example.abc_new',
               ),
-              
-              // ── 1. ແຕ້ມເສັ້ນທາງ (Polyline Layer) ──
+
+              // ── Overlay Hybrid ──
+              if (layer.overlayUrl != null)
+                Opacity(
+                  opacity: 0.55,
+                  child: TileLayer(
+                    urlTemplate: layer.overlayUrl!,
+                    userAgentPackageName: 'com.example.abc_new',
+                  ),
+                ),
+
+              // ── เส้นทาง ──
               if (_routePoints.isNotEmpty)
                 PolylineLayer(
                   polylines: [
@@ -187,9 +323,9 @@ class _MapPageState extends State<MapPage> {
                   ],
                 ),
 
+              // ── Markers ──
               MarkerLayer(
                 markers: [
-                  // ມາກເກີ ຕຳແໜ່ງປັດຈຸບັນຂອງຜູ້ໃຊ້ (ຈະເຄື່ອນທີ່ຕາມ GPS ຕົວຈິງ)
                   if (_currentLocation != null)
                     Marker(
                       point: _currentLocation!,
@@ -200,14 +336,10 @@ class _MapPageState extends State<MapPage> {
                           shape: BoxShape.circle,
                           color: Colors.blue,
                           border: Border.all(color: Colors.white, width: 2.5),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
+                          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
                         ),
                       ),
                     ),
-                  
-                  // ມາກເກີ ຈຸດໝາຍປາຍທາງ
                   if (_hasPlace)
                     Marker(
                       point: _placeLatLng,
@@ -226,7 +358,9 @@ class _MapPageState extends State<MapPage> {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
-                                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+                                  boxShadow: const [
+                                    BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+                                  ],
                                 ),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
@@ -250,13 +384,14 @@ class _MapPageState extends State<MapPage> {
                     ),
                 ],
               ),
-              const RichAttributionWidget(
-                attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+
+              RichAttributionWidget(
+                attributions: [TextSourceAttribution(layer.attribution)],
               ),
             ],
           ),
 
-          // Loading Indicator ຕອນຄຳນວນເສັ້ນທາງ
+          // ── Loading ──
           if (_isLoadingRoute)
             const Positioned(
               top: 16,
@@ -279,17 +414,28 @@ class _MapPageState extends State<MapPage> {
               ),
             ),
 
-          // ປຸ່ມຄວບຄຸມ Zoom / My Location
+          _buildLayerPanel(),
+
+          // ── ปุ่มควบคุม ──
           Positioned(
             right: 16,
             bottom: 32,
             child: Column(
               children: [
                 FloatingActionButton.small(
+                  heroTag: 'layer_toggle',
+                  backgroundColor: _showLayerPanel ? Colors.teal : Colors.white,
+                  foregroundColor: _showLayerPanel ? Colors.white : Colors.teal,
+                  onPressed: () => setState(() => _showLayerPanel = !_showLayerPanel),
+                  child: Icon(_currentLayer.icon),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
                   heroTag: 'zoom_in',
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.teal,
-                  onPressed: () => _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1),
+                  onPressed: () => _mapController.move(
+                      _mapController.camera.center, _mapController.camera.zoom + 1),
                   child: const Icon(Icons.add),
                 ),
                 const SizedBox(height: 8),
@@ -297,7 +443,8 @@ class _MapPageState extends State<MapPage> {
                   heroTag: 'zoom_out',
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.teal,
-                  onPressed: () => _mapController.move(_mapController.camera.center, _mapController.camera.zoom - 1),
+                  onPressed: () => _mapController.move(
+                      _mapController.camera.center, _mapController.camera.zoom - 1),
                   child: const Icon(Icons.remove),
                 ),
                 const SizedBox(height: 8),

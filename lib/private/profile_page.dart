@@ -4,13 +4,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:google_sign_in/google_sign_in.dart';
 import 'edit_profile_page.dart';
 import 'add_highlight_page.dart';
-import '../routes/map.dart'; // ✅ ดึงหน้าแผนที่เข้ามาใช้งาน
+import '../routes/map.dart';
+import '../auth/login_screen.dart'; // 🔹 import หน้า Login
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  final String? targetUserId;
+  const ProfilePage({super.key, this.targetUserId});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -22,8 +24,11 @@ class _ProfilePageState extends State<ProfilePage> {
   List<dynamic> highlights = [];
   bool _isUploading = false;
   final TextEditingController _editContentController = TextEditingController();
-  
+
   StreamSubscription<DocumentSnapshot>? _userSubscription;
+
+  String? targetId;
+  bool isMe = true;
 
   @override
   void initState() {
@@ -33,15 +38,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _listenToUserData() {
     user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+    targetId = widget.targetUserId ?? user?.uid;
+    isMe = (user?.uid == targetId);
+
+    if (targetId != null) {
       _userSubscription = FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(targetId)
           .snapshots()
           .listen((doc) {
         if (doc.exists && mounted) {
           setState(() {
             userData = doc.data();
+            print('📦 ProfilePage userData keys: ${userData?.keys}');
             highlights = userData?['highlights'] ?? [];
           });
         } else if (mounted) {
@@ -83,14 +92,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     return const Center(child: CircularProgressIndicator(color: Colors.white));
                   },
                   errorBuilder: (c, e, s) => Container(
-                    width: 200, height: 200, color: Colors.grey[800],
+                    width: 200,
+                    height: 200,
+                    color: Colors.grey[800],
                     child: const Icon(Icons.broken_image, color: Colors.white, size: 50),
                   ),
                 ),
               ),
             ),
             Positioned(
-              top: 40, right: 20,
+              top: 40,
+              right: 20,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white, size: 32),
                 onPressed: () => Navigator.pop(context),
@@ -128,7 +140,9 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16, right: 16, top: 16,
+          left: 16,
+          right: 16,
+          top: 16,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -173,7 +187,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text("ລົບໂພສຕ໌?"),
         content: const Text("ທ່ານຕ້ອງການລົບໂພສຕ໌ນີ້ແທ້ຫຼືບໍ່?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົกເລີກ")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົກເລີກ")),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -191,25 +205,94 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _logout() {
+  Future<void> _deleteHighlight(Map<String, dynamic> highlightData) async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("ອອກຈາກລະບົບ"),
-        content: const Text("ທ່ານຕ້ອງການອອກຈາກລະບົບແທ້ຫຼືບໍ່?"),
+        title: const Text("ລົບໄຮໄລທ໌?"),
+        content: const Text("ທ່ານຕ້ອງການລົບໄຮໄລທ໌ນີ້ແທ້ຫຼືບໍ່?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("ຍົກເລີກ")),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-              if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+              if (targetId != null) {
+                await FirebaseFirestore.instance.collection('users').doc(targetId).update({
+                  'highlights': FieldValue.arrayRemove([highlightData]),
+                });
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("ລົບໄຮໄລທ໌ສຳເລັດ"), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
+            child: const Text("ລົບ", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🔧 ฟังก์ชัน Logout ที่ปรับปรุงให้เคลียร์ Google และนำทางไปหน้า Login
+  void _logout() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("ອອກຈາກລະບົບ"),
+        content: const Text("ທ່ານຕ້ອງການອອກຈາກລະບົບແທ້ຫຼືບໍ່?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("ຍົກເລີກ"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
             child: const Text("ຢືນຢັນ", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
+
+    if (shouldLogout != true) return;
+
+    if (mounted) Navigator.pop(context);
+
+    try {
+      // 1. Sign out from Google (ถ้าใช้)
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      if (await googleSignIn.isSignedIn()) {
+        await googleSignIn.signOut();
+      }
+
+      // 2. Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+
+      // 3. นำทางไปหน้า Login และล้าง Stack ทั้งหมด
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("ອອກຈາກລະບົບສຳເລັດ"), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      debugPrint("Logout error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("ເກີດຂໍ້ຜິດພາດ: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -218,9 +301,17 @@ class _ProfilePageState extends State<ProfilePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final photoUrl = userData!['photoURL'] ?? user?.photoURL ?? 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300';
-    final coverUrl = userData!['coverURL'] ?? 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600';
-    final displayName = userData!['displayName'] ?? user?.displayName ?? user?.email ?? 'User';
+    // ✅ รองรับทั้ง photoUrl และ photoURL
+    final photoUrl = userData!['photoUrl'] ??
+        userData!['photoURL'] ??
+        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300';
+
+    // ✅ รองรับทั้ง coverUrl และ coverURL
+    final coverUrl = userData!['coverUrl'] ??
+        userData!['coverURL'] ??
+        'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600';
+
+    final displayName = userData!['displayName'] ?? 'User';
     final bio = userData!['bio'] ?? '';
 
     return Scaffold(
@@ -230,19 +321,21 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const EditProfilePage()),
+          if (isMe)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const EditProfilePage()),
+              ),
+              tooltip: "ແກ້ໄຂໂພຣໄຟລ໌",
             ),
-            tooltip: "ແກ້ໄຂໂພຣໄຟລ໌",
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: "ອອກຈາກລະບົບ",
-          ),
+          if (isMe)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: _logout,
+              tooltip: "ອອກຈາກລະບົບ",
+            ),
         ],
       ),
       body: SingleChildScrollView(
@@ -259,13 +352,16 @@ class _ProfilePageState extends State<ProfilePage> {
                     children: [
                       GestureDetector(
                         onTap: () => _showImagePreview(coverUrl, title: "ຮູບພື້ນຫຼັງ"),
-                        onLongPress: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
-                        },
+                        onLongPress: isMe
+                            ? () {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
+                              }
+                            : null,
                         child: Stack(
                           children: [
                             Container(
-                              height: 200, width: double.infinity,
+                              height: 200,
+                              width: double.infinity,
                               decoration: BoxDecoration(
                                 image: coverUrl.isNotEmpty ? DecorationImage(image: NetworkImage(coverUrl), fit: BoxFit.cover) : null,
                                 color: Colors.grey[300],
@@ -279,15 +375,19 @@ class _ProfilePageState extends State<ProfilePage> {
                         bottom: -50,
                         child: GestureDetector(
                           onTap: () => _showImagePreview(photoUrl, title: "ຮູບໂພຣໄຟລ໌"),
-                          onLongPress: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
-                          },
+                          onLongPress: isMe
+                              ? () {
+                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfilePage()));
+                                }
+                              : null,
                           child: Stack(
                             children: [
                               CircleAvatar(
-                                radius: 54, backgroundColor: Colors.white,
+                                radius: 54,
+                                backgroundColor: Colors.white,
                                 child: CircleAvatar(
-                                  radius: 50, backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                                  radius: 50,
+                                  backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
                                   child: photoUrl.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
                                 ),
                               ),
@@ -322,13 +422,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text("ໄຮໄລທ໌", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        IconButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AddHighlightPage()),
+                        if (isMe)
+                          IconButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AddHighlightPage()),
+                            ),
+                            icon: const Icon(Icons.add_box),
                           ),
-                          icon: const Icon(Icons.add_box),
-                        ),
                       ],
                     ),
                   ),
@@ -350,7 +451,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             width: 80,
                             margin: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(36), 
+                              borderRadius: BorderRadius.circular(36),
                               border: Border.all(color: Colors.grey[300]!, width: 2),
                             ),
                             child: Padding(
@@ -365,7 +466,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                       decoration: const BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: [Colors.black54, Colors.transparent],
-                                          begin: Alignment.bottomCenter, end: Alignment.center,
+                                          begin: Alignment.bottomCenter,
+                                          end: Alignment.center,
                                         ),
                                       ),
                                     ),
@@ -375,11 +477,39 @@ class _ProfilePageState extends State<ProfilePage> {
                                         padding: const EdgeInsets.only(bottom: 6),
                                         child: Text(
                                           h['title'] ?? '',
-                                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                         ),
                                       ),
                                     ),
+                                    if (isMe)
+                                      Positioned(
+                                        top: 0,
+                                        right: 0,
+                                        child: PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert, color: Colors.white, size: 18),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onSelected: (value) {
+                                            if (value == 'delete') {
+                                              _deleteHighlight(h);
+                                            }
+                                          },
+                                          itemBuilder: (BuildContext context) => [
+                                            const PopupMenuItem(
+                                              value: 'delete',
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.delete, color: Colors.red, size: 16),
+                                                  SizedBox(width: 8),
+                                                  Text('ລົບໄຮໄລທ໌', style: TextStyle(color: Colors.red, fontSize: 13)),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -405,11 +535,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: Text("✅ ສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
                   ),
-                  if (user != null)
+                  if (targetId != null)
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
-                          .doc(user!.uid)
+                          .doc(targetId)
                           .collection('plans')
                           .where('status', isEqualTo: 'completed')
                           .orderBy('addedAt', descending: true)
@@ -436,7 +566,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               final imageUrl = data['imageUrl'] ?? '';
                               final placeName = data['placeName'] ?? '';
 
-                              // 📍 ✅ แก้ไข: ระบบดึงพิกัดแบบปลอดภัย 100%
                               double? pLat;
                               double? pLng;
                               if (data['location'] is GeoPoint) {
@@ -472,15 +601,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                         child: imageUrl.isNotEmpty
                                             ? Image.network(
                                                 imageUrl,
-                                                width: 100, height: 100,
+                                                width: 100,
+                                                height: 100,
                                                 fit: BoxFit.cover,
                                                 errorBuilder: (c, e, s) => Container(
-                                                  width: 100, height: 100, color: Colors.grey[300],
+                                                  width: 100,
+                                                  height: 100,
+                                                  color: Colors.grey[300],
                                                   child: const Icon(Icons.image_not_supported, color: Colors.grey),
                                                 ),
                                               )
                                             : Container(
-                                                width: 100, height: 100, color: Colors.grey[300],
+                                                width: 100,
+                                                height: 100,
+                                                color: Colors.grey[300],
                                                 child: const Icon(Icons.place, color: Colors.orange, size: 36),
                                               ),
                                       ),
@@ -512,11 +646,11 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               child: const Text("ໂພສຕ໌ທີ່ແຊຣ໌", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ),
-            if (user != null)
+            if (targetId != null)
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('user_posts')
-                    .where('userId', isEqualTo: user!.uid)
+                    .where('userId', isEqualTo: targetId)
                     .orderBy('createdAt', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
@@ -526,7 +660,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: Colors.white,
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
-                      child: const Center(child: Text("ທ່ານຍັງບໍ່ໄດ້ແຊຣ໌ໂພສຕ໌ໃດເລີຍ", style: TextStyle(color: Colors.grey))),
+                      child: const Center(child: Text("ຍັງບໍ່ມີໂພສຕ໌", style: TextStyle(color: Colors.grey))),
                     );
                   }
 
@@ -538,19 +672,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     itemBuilder: (context, index) {
                       final data = posts[index].data() as Map<String, dynamic>;
                       final postId = posts[index].id;
-                      
+
                       data['id'] = postId;
 
-                      final title = data['title'] ?? ''; 
+                      final title = data['title'] ?? '';
                       final content = data['content'] ?? '';
                       final placeName = data['placeName'] ?? data['locationName'] ?? '';
                       final images = (data['images'] as List?)?.map((e) => e.toString()).toList() ?? [];
                       final likedBy = List<String>.from(data['likedBy'] ?? []);
                       final likes = data['likes'] ?? 0;
                       final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-                      final isMine = data['userId'] == user!.uid;
+                      final isMine = data['userId'] == user?.uid;
 
-                      // 📍 ✅ แก้ไข: ระบบดึงพิกัดแบบปลอดภัย 100% สำหรับโพสต์ที่แชร์
                       double? postLat;
                       double? postLng;
                       if (data['location'] is GeoPoint) {
@@ -565,7 +698,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
-                        color: Colors.white, 
+                        color: Colors.white,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -608,20 +741,20 @@ class _ProfilePageState extends State<ProfilePage> {
                                         }
                                       },
                                       itemBuilder: (BuildContext context) => [
-                                        PopupMenuItem(
+                                        const PopupMenuItem(
                                           value: 'edit',
                                           child: Row(
-                                            children: const [
+                                            children: [
                                               Icon(Icons.edit, color: Colors.blue, size: 20),
                                               SizedBox(width: 8),
                                               Text('ແກ້ໄຂໂພສຕ໌'),
                                             ],
                                           ),
                                         ),
-                                        PopupMenuItem(
+                                        const PopupMenuItem(
                                           value: 'delete',
                                           child: Row(
-                                            children: const [
+                                            children: [
                                               Icon(Icons.delete, color: Colors.red, size: 20),
                                               SizedBox(width: 8),
                                               Text('ລົບໂພສຕ໌', style: TextStyle(color: Colors.red)),
@@ -634,7 +767,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
 
-                            // 📍 กดดูแผนที่จากชื่อสถานที่
                             if (placeName.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -652,10 +784,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                     );
                                   },
                                   child: Text(
-                                    "📍 $placeName", 
+                                    "📍 $placeName",
                                     style: const TextStyle(
-                                      fontWeight: FontWeight.w600, 
-                                      color: Colors.teal, 
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.teal,
                                       fontSize: 13,
                                       decoration: TextDecoration.underline,
                                     ),
@@ -702,10 +834,10 @@ class _ProfilePageState extends State<ProfilePage> {
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(4),
                                           child: Image.network(
-                                            images[i], 
-                                            width: images.length == 1 ? MediaQuery.of(context).size.width - 24 : 280, 
-                                            height: 260, 
-                                            fit: BoxFit.cover
+                                            images[i],
+                                            width: images.length == 1 ? MediaQuery.of(context).size.width - 24 : 280,
+                                            height: 260,
+                                            fit: BoxFit.cover,
                                           ),
                                         ),
                                       ),
@@ -728,7 +860,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ],
                               ),
                             ),
-                            
+
                             const Divider(height: 1, thickness: 0.5),
 
                             Row(
@@ -742,17 +874,17 @@ class _ProfilePageState extends State<ProfilePage> {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Icon(
-                                            likedBy.contains(user!.uid) ? Icons.favorite : Icons.favorite_border, 
-                                            color: likedBy.contains(user!.uid) ? Colors.red : Colors.grey[600],
+                                            user != null && likedBy.contains(user!.uid) ? Icons.favorite : Icons.favorite_border,
+                                            color: user != null && likedBy.contains(user!.uid) ? Colors.red : Colors.grey[600],
                                             size: 22,
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
-                                            'ຖືກໃຈ', 
+                                            'ຖືກໃຈ',
                                             style: TextStyle(
-                                              color: likedBy.contains(user!.uid) ? Colors.red : Colors.grey[700],
+                                              color: user != null && likedBy.contains(user!.uid) ? Colors.red : Colors.grey[700],
                                               fontWeight: FontWeight.w600,
-                                              fontSize: 14
+                                              fontSize: 14,
                                             ),
                                           ),
                                         ],
@@ -841,7 +973,7 @@ class _PostImageViewerPageState extends State<PostImageViewerPage> {
           });
         },
         itemBuilder: (context, index) {
-          return InteractiveViewer( 
+          return InteractiveViewer(
             minScale: 0.5,
             maxScale: 4.0,
             child: Center(
@@ -893,7 +1025,7 @@ class _HighlightViewerPageState extends State<HighlightViewerPage> {
     if (currentIndex < images.length - 1) {
       setState(() => currentIndex++);
     } else {
-      Navigator.pop(context); 
+      Navigator.pop(context);
     }
   }
 
@@ -935,7 +1067,9 @@ class _HighlightViewerPageState extends State<HighlightViewerPage> {
               ),
             ),
             Positioned(
-              top: 10, left: 10, right: 10,
+              top: 10,
+              left: 10,
+              right: 10,
               child: Column(
                 children: [
                   Row(
@@ -961,7 +1095,9 @@ class _HighlightViewerPageState extends State<HighlightViewerPage> {
                         child: Text(
                           widget.highlight['title'] ?? 'Highlight',
                           style: const TextStyle(
-                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                             shadows: [Shadow(blurRadius: 4, color: Colors.black)],
                           ),
                         ),

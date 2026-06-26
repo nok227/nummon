@@ -8,12 +8,30 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:crypto/crypto.dart';
-import 'package:video_compress/video_compress.dart'; // 🌟 ເພີ່ມຕົວບີບອັດວິດີໂອ
-import '../models/api_Cloudinary.dart'; // 🌟 Import Config
+import 'package:video_compress/video_compress.dart';
+import '../models/api_Cloudinary.dart';
 import 'story_preview_page.dart';
+// 🔹 Import ProfilePage
+import '../private/profile_page.dart';
 
 // ---------------------------------------------------------
-// ฟังก์ชันลบไฟล์ออกจาก Cloudinary แบบละเอียด (Pro Delete)
+// ฟังก์ชันสกัดภาพกึ่งกลางเพื่อใช้เป็นภาพหน้าปก
+// ---------------------------------------------------------
+String getMiddleFrameThumbnail(String url) {
+  if (url.isEmpty) return url;
+  const marker = '/upload/';
+  final idx = url.indexOf(marker);
+  if (idx == -1) return url;
+
+  final insertPos = idx + marker.length;
+  String cleanUrl = url.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '.jpg');
+  return cleanUrl.substring(0, insertPos) +
+      'so_50p,f_auto,q_auto,vc_auto/' +
+      cleanUrl.substring(insertPos);
+}
+
+// ---------------------------------------------------------
+// ฟังก์ชันลบไฟล์ออกจาก Cloudinary
 // ---------------------------------------------------------
 Future<void> deleteFromCloudinary(String url, bool isVideo) async {
   try {
@@ -28,7 +46,7 @@ Future<void> deleteFromCloudinary(String url, bool isVideo) async {
 
     List<String> publicIdSegments = [];
     for (int i = uploadIndex + 1; i < segments.length; i++) {
-      if (RegExp(r'^v\d+$').hasMatch(segments[i])) continue; // ຂ້າມເວີຊັນ
+      if (RegExp(r'^v\d+$').hasMatch(segments[i])) continue;
       if (segments[i].contains('so_') ||
           segments[i].contains('eo_') ||
           segments[i].contains('f_') ||
@@ -43,22 +61,20 @@ Future<void> deleteFromCloudinary(String url, bool isVideo) async {
     String publicId = publicIdWithExtension;
 
     if (publicIdWithExtension.contains('.')) {
-      publicId = publicIdWithExtension.substring(
-          0, publicIdWithExtension.lastIndexOf('.'));
+      publicId = publicIdWithExtension.substring(0, publicIdWithExtension.lastIndexOf('.'));
     }
 
     if (publicId.isEmpty) return;
 
-    final timestamp =
-        (DateTime.now().millisecondsSinceEpoch / 1000).round().toString();
+    final timestamp = (DateTime.now().millisecondsSinceEpoch / 1000).round().toString();
     final stringToSign = "public_id=$publicId&timestamp=$timestamp$apiSecret";
     final bytes = utf8.encode(stringToSign);
     final digest = sha1.convert(bytes);
     final signature = digest.toString();
 
     final resourceType = isVideo ? "video" : "image";
-    final deleteUri = Uri.parse(
-        "https://api.cloudinary.com/v1_1/$cloudName/$resourceType/destroy");
+    final deleteUri =
+        Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/$resourceType/destroy");
 
     final response = await http.post(deleteUri, body: {
       'public_id': publicId,
@@ -95,18 +111,6 @@ class _StorySectionState extends State<StorySection> {
   void initState() {
     super.initState();
     _cleanupExpiredStories();
-  }
-
-  // ฟังก์ชันแปลง URL วิดีโอ Cloudinary ให้กลายเป็นภาพปกตรงกึ่งกลางวิดีโอ (so_50p) เพื่อทำเป็น Default Preview
-  String _getMiddleFrameThumbnail(String url) {
-    if (url.isEmpty) return url;
-    const marker = '/upload/';
-    final idx = url.indexOf(marker);
-    if (idx == -1) return url;
-
-    final insertPos = idx + marker.length;
-    String cleanUrl = url.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '.jpg');
-    return cleanUrl.substring(0, insertPos) + 'so_50p,f_auto,q_auto,vc_auto/' + cleanUrl.substring(insertPos);
   }
 
   Future<void> _cleanupExpiredStories() async {
@@ -147,8 +151,7 @@ class _StorySectionState extends State<StorySection> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
@@ -191,8 +194,7 @@ class _StorySectionState extends State<StorySection> {
     if (isVideo) {
       file = await _picker.pickVideo(source: ImageSource.gallery);
     } else {
-      file = await _picker.pickImage(
-          source: ImageSource.gallery, imageQuality: 70);
+      file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     }
 
     if (file == null) return;
@@ -252,8 +254,7 @@ class _StorySectionState extends State<StorySection> {
         'storyImage': uploadedUrl,
         'mediaType': isVideo ? 'video' : 'image',
         'createdAt': FieldValue.serverTimestamp(),
-        'expireAt':
-            Timestamp.fromDate(DateTime.now().add(const Duration(hours: 24))),
+        'expireAt': Timestamp.fromDate(DateTime.now().add(const Duration(hours: 24))),
       });
 
       _showSnackBar("ສ້າງສະຕໍຣີ່ສຳເລັດ! 🎉", isError: false);
@@ -271,8 +272,8 @@ class _StorySectionState extends State<StorySection> {
     double? endSeconds,
   }) async {
     final cloudName = CloudinaryConfig.cloudinaryCloudName;
-    final uploadPreset = CloudinaryConfig.cloudinaryUploadPreset; 
-    
+    final uploadPreset = CloudinaryConfig.cloudinaryUploadPreset;
+
     File fileToUpload = File(file.path);
 
     if (isVideo) {
@@ -292,11 +293,11 @@ class _StorySectionState extends State<StorySection> {
 
     final resourceType = isVideo ? "video" : "image";
     final uri = Uri.parse("https://api.cloudinary.com/v1_1/$cloudName/$resourceType/upload");
-    
+
     final request = http.MultipartRequest("POST", uri);
     request.fields['upload_preset'] = uploadPreset;
     request.files.add(await http.MultipartFile.fromPath('file', fileToUpload.path));
-    
+
     final response = await request.send();
 
     if (isVideo) {
@@ -317,11 +318,10 @@ class _StorySectionState extends State<StorySection> {
       url = _applyVideoTrimTransformation(url, startSeconds, endSeconds);
     }
 
-    return url; 
+    return url;
   }
 
-  String _applyVideoTrimTransformation(
-      String url, double startSeconds, double endSeconds) {
+  String _applyVideoTrimTransformation(String url, double startSeconds, double endSeconds) {
     const marker = '/upload/';
     final idx = url.indexOf(marker);
     if (idx == -1) return url;
@@ -329,16 +329,12 @@ class _StorySectionState extends State<StorySection> {
     final insertPos = idx + marker.length;
     final transformation =
         'so_${startSeconds.toStringAsFixed(2)},eo_${endSeconds.toStringAsFixed(2)},f_auto,q_auto,vc_auto/';
-    return url.substring(0, insertPos) +
-        transformation +
-        url.substring(insertPos);
+    return url.substring(0, insertPos) + transformation + url.substring(insertPos);
   }
 
   void _showSnackBar(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(msg),
-          backgroundColor: isError ? Colors.red : Colors.green),
+      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
     );
   }
 
@@ -374,7 +370,6 @@ class _StorySectionState extends State<StorySection> {
             builder: (context, snapshot) {
               List<Widget> storyWidgets = [];
 
-              // ปุ่มกดสร้างสตอรี่ของตัวเองชิ้นแรกสุด
               storyWidgets.add(
                 GestureDetector(
                   onTap: isUploadingStory ? null : _createNewStory,
@@ -398,11 +393,9 @@ class _StorySectionState extends State<StorySection> {
                             clipBehavior: Clip.none,
                             children: [
                               ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(16)),
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                                   child: Image.asset('assets/default.jpg',
-                                      width: double.infinity,
-                                      fit: BoxFit.cover)),
+                                      width: double.infinity, fit: BoxFit.cover)),
                               Positioned(
                                 bottom: -18,
                                 left: 0,
@@ -419,8 +412,7 @@ class _StorySectionState extends State<StorySection> {
                                               width: 14,
                                               height: 14,
                                               child: CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                  strokeWidth: 2))
+                                                  color: Colors.white, strokeWidth: 2))
                                           : const Icon(Icons.add,
                                               color: Colors.white, size: 20),
                                     ),
@@ -436,9 +428,7 @@ class _StorySectionState extends State<StorySection> {
                                 alignment: Alignment.bottomCenter,
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Text(
-                                    isUploadingStory
-                                        ? "ກຳລັງອັບ..."
-                                        : "ສ້າງສະຕໍຣີ່",
+                                    isUploadingStory ? "ກຳລັງອັບ..." : "ສ້າງສະຕໍຣີ່",
                                     style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
@@ -476,7 +466,6 @@ class _StorySectionState extends State<StorySection> {
                   ));
                 });
 
-                // 🌟 ฟีเจอร์ที่ 1: ดึงกลุ่มสตอรี่ของตัวเอง ย้ายมาแสดงที่แถบแรกสุดเสมอ
                 if (currentUserId != null) {
                   int myIndex = groups.indexWhere((g) => g.userId == currentUserId);
                   if (myIndex != -1) {
@@ -496,8 +485,7 @@ class _StorySectionState extends State<StorySection> {
                       onTap: () => _openStoryGroupViewer(groups, i),
                       child: Container(
                         width: 110,
-                        margin:
-                            const EdgeInsets.only(right: 8, bottom: 5, top: 5),
+                        margin: const EdgeInsets.only(right: 8, bottom: 5, top: 5),
                         decoration: BoxDecoration(
                           color: Colors.grey[300],
                           borderRadius: BorderRadius.circular(16),
@@ -517,35 +505,29 @@ class _StorySectionState extends State<StorySection> {
                                     ? Stack(
                                         fit: StackFit.expand,
                                         children: [
-                                          // 🌟 ฟีเจอร์ที่ 2: ดึงภาพจากกึ่งกลางวิดีโอ (so_50p) มาแสดงเป็นหน้าปกแทนจอดำ
                                           Image.network(
-                                            _getMiddleFrameThumbnail(lastStory['storyImage'] ?? ''),
+                                            getMiddleFrameThumbnail(lastStory['storyImage'] ?? ''),
                                             fit: BoxFit.cover,
                                             errorBuilder: (c, e, s) => Container(color: Colors.black87),
                                           ),
-                                          Container(color: Colors.black),
+                                          Container(color: Colors.black26),
                                           const Center(
                                             child: Icon(Icons.play_circle_fill,
-                                                color: Colors.white,
-                                                size: 32),
+                                                color: Colors.white, size: 32),
                                           ),
                                         ],
                                       )
                                     : Image.network(
                                         lastStory['storyImage'] ?? '',
                                         fit: BoxFit.cover,
-                                        errorBuilder: (c, e, s) =>
-                                            const Icon(Icons.broken_image)),
+                                        errorBuilder: (c, e, s) => const Icon(Icons.broken_image)),
                               ),
                             ),
                             Container(
                                 decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(16),
                                     gradient: LinearGradient(
-                                        colors: [
-                                          Colors.black.withOpacity(0.5),
-                                          Colors.transparent
-                                        ],
+                                        colors: [Colors.black.withOpacity(0.5), Colors.transparent],
                                         begin: Alignment.bottomCenter,
                                         end: Alignment.topCenter))),
                             Positioned(
@@ -557,7 +539,9 @@ class _StorySectionState extends State<StorySection> {
                                   border: Border.all(
                                       color: isMyStory
                                           ? Colors.greenAccent
-                                          : (group.stories.length > 1 ? Colors.pinkAccent : Colors.blueAccent),
+                                          : (group.stories.length > 1
+                                              ? Colors.pinkAccent
+                                              : Colors.blueAccent),
                                       width: 2.5),
                                 ),
                                 child: CircleAvatar(
@@ -566,8 +550,7 @@ class _StorySectionState extends State<StorySection> {
                                   backgroundImage: (group.userAvatar.isNotEmpty &&
                                           group.userAvatar.startsWith('http'))
                                       ? NetworkImage(group.userAvatar)
-                                      : const AssetImage('assets/default.jpg')
-                                          as ImageProvider,
+                                      : const AssetImage('assets/default.jpg') as ImageProvider,
                                 ),
                               ),
                             ),
@@ -588,8 +571,7 @@ class _StorySectionState extends State<StorySection> {
                                 top: 8,
                                 right: 8,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                   decoration: BoxDecoration(
                                       color: Colors.black54,
                                       borderRadius: BorderRadius.circular(8)),
@@ -607,8 +589,7 @@ class _StorySectionState extends State<StorySection> {
                   );
                 }
               }
-              return ListView(
-                  scrollDirection: Axis.horizontal, children: storyWidgets);
+              return ListView(scrollDirection: Axis.horizontal, children: storyWidgets);
             },
           ),
         ),
@@ -618,25 +599,29 @@ class _StorySectionState extends State<StorySection> {
 }
 
 // ---------------------------------------------------------
-// Classes ສໍາລັບจัดการ Viewer ของ Story
+// Classes ສໍາລັບຈັດການ Viewer ຂອງ Story
 // ---------------------------------------------------------
 class UserStoryGroup {
   final String userId;
   final String userName;
   final String userAvatar;
   final List<Map<String, dynamic>> stories;
-  UserStoryGroup(
-      {required this.userId,
-      required this.userName,
-      required this.userAvatar,
-      required this.stories});
+  UserStoryGroup({
+    required this.userId,
+    required this.userName,
+    required this.userAvatar,
+    required this.stories,
+  });
 }
 
 class FacebookStoryViewer extends StatefulWidget {
   final List<UserStoryGroup> storyGroups;
   final int initialGroupIndex;
-  const FacebookStoryViewer(
-      {super.key, required this.storyGroups, required this.initialGroupIndex});
+  const FacebookStoryViewer({
+    super.key,
+    required this.storyGroups,
+    required this.initialGroupIndex,
+  });
   @override
   State<FacebookStoryViewer> createState() => _FacebookStoryViewerState();
 }
@@ -681,14 +666,12 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     final story = widget.storyGroups[currentGroupIdx].stories[currentStoryIdx];
     final isVideo = story['mediaType'] == 'video';
 
-    // 🌟 ฟีเจอร์ที่ 4: ลงชื่อประวัติการรับชมสตอรี่แบบอัตโนมัติลงคอลเลกชันย่อย 'viewers'
     if (story['storyDocId'] != null) {
       _recordStoryView(story['storyDocId'], story['userId']);
     }
 
     if (isVideo) {
-      _videoController = VideoPlayerController.networkUrl(
-          Uri.parse(story['storyImage'] ?? ''));
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(story['storyImage'] ?? ''));
       try {
         await _videoController!.initialize();
         if (_isDisposed) return;
@@ -705,10 +688,37 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     }
   }
 
-  // ฟังก์ชันลงทะเบียนการกดดูเข้าชม
+  // 🔹 ฟังก์ชันหยุดเรื่องราว
+  void _pauseStory() {
+    _timer?.cancel();
+    if (_isVideoPlaying && _videoController != null) {
+      _videoController!.pause();
+    }
+  }
+
+  // 🔹 ฟังก์ชันเล่นต่อ (ปรับปรุงให้ทำงานได้อย่างมั่นคง)
+  void _resumeStory() {
+    if (_isDisposed || !mounted) return;
+
+    final story = widget.storyGroups[currentGroupIdx].stories[currentStoryIdx];
+    final isVideo = story['mediaType'] == 'video';
+
+    if (isVideo) {
+      if (_videoController != null && _videoController!.value.isInitialized) {
+        _videoController!.play();
+        _startVideoProgress();
+      } else {
+        // ถ้า controller หาย ให้โหลดใหม่
+        _showStory();
+      }
+    } else {
+      _startImageTimer();
+    }
+  }
+
   Future<void> _recordStoryView(String storyId, String ownerId) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.uid == ownerId) return; // ถ้าเป็นสตอรี่ของตัวเองไม่ต้องบันทึก
+    if (user == null || user.uid == ownerId) return;
 
     String name = user.displayName ?? "ນັກທ່ອງທ່ຽວ";
     String avatar = user.photoURL ?? "";
@@ -734,7 +744,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     }, SetOptions(merge: true));
   }
 
-  // 🌟 ฟีเจอร์ที่ 3: ฟังก์ชันบันทึกการกดส่งความรู้สึกอีโมจิลงฐานข้อมูลคอลเลกชันย่อย
   Future<void> _sendEmojiReaction(String storyId, String emoji) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -775,7 +784,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     }
   }
 
-  // 🌟 ฟีเจอร์ที่ 4: หน้าต่างแผง Bottom Sheet แสดงรายชื่อผู้ชมพร้อมอีโมจิที่พวกเขากด
   void _showViewersListBottomSheet(String storyId) {
     showModalBottomSheet(
       context: context,
@@ -794,18 +802,24 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
             }
             final docs = snapshot.data!.docs;
             if (docs.isEmpty) {
-              return const Center(child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Text("ຍັງບໍ່ມີຄົນເບິ່ງເທື່ອ", style: TextStyle(color: Colors.white60)),
-              ));
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text("ຍັງບໍ່ມີຄົນເບິ່ງເທື່ອ", style: TextStyle(color: Colors.white60)),
+                ),
+              );
             }
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 12),
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2))),
+                Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2))),
                 const SizedBox(height: 12),
-                Text("ຄົນເບິ່ງທັງໝົດ (${docs.length})", style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                Text("ຄົນເບິ່ງທັງໝົດ (${docs.length})",
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
                 const Divider(color: Colors.white12),
                 Expanded(
                   child: ListView.builder(
@@ -815,15 +829,17 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                       final name = data['userName'] ?? 'User';
                       final avt = data['userAvatar'] ?? '';
                       final emoji = data['emoji'] as String?;
-                      
+
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.grey[800],
-                          backgroundImage: (avt.isNotEmpty && avt.startsWith('http')) ? NetworkImage(avt) : const AssetImage('assets/default.jpg') as ImageProvider,
+                          backgroundImage: (avt.isNotEmpty && avt.startsWith('http'))
+                              ? NetworkImage(avt)
+                              : const AssetImage('assets/default.jpg') as ImageProvider,
                         ),
                         title: Text(name, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                        trailing: emoji != null 
-                            ? Text(emoji, style: const TextStyle(fontSize: 22)) 
+                        trailing: emoji != null
+                            ? Text(emoji, style: const TextStyle(fontSize: 22))
                             : const Text("ເບິ່ງແລ້ວ", style: TextStyle(color: Colors.white38, fontSize: 11)),
                       );
                     },
@@ -835,8 +851,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
         );
       },
     ).then((_) {
-      // เล่นวิดีโอและเวลาต่อทันทีที่ปิดแผ่น BottomSheet
-      _showStory();
+      _resumeStory();
     });
   }
 
@@ -860,17 +875,13 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
   void _startVideoProgress() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(milliseconds: 50), (t) {
-      if (_isDisposed ||
-          _videoController == null ||
-          !_videoController!.value.isInitialized) {
+      if (_isDisposed || _videoController == null || !_videoController!.value.isInitialized) {
         t.cancel();
         return;
       }
 
-      final double pos =
-          _videoController!.value.position.inMilliseconds.toDouble();
-      final double dur =
-          _videoController!.value.duration.inMilliseconds.toDouble();
+      final double pos = _videoController!.value.position.inMilliseconds.toDouble();
+      final double dur = _videoController!.value.duration.inMilliseconds.toDouble();
 
       if (dur > 0) {
         setState(() {
@@ -878,10 +889,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
         });
       }
 
-      if (pos >= dur ||
-          (!_videoController!.value.isPlaying &&
-              pos > 0 &&
-              pos >= (dur - 100))) {
+      if (pos >= dur || (!_videoController!.value.isPlaying && pos > 0 && pos >= (dur - 100))) {
         t.cancel();
         _nextStory();
       }
@@ -911,8 +919,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     } else {
       if (currentGroupIdx > 0) {
         currentGroupIdx--;
-        currentStoryIdx =
-            widget.storyGroups[currentGroupIdx].stories.length - 1;
+        currentStoryIdx = widget.storyGroups[currentGroupIdx].stories.length - 1;
         _showStory();
       } else {
         _showStory();
@@ -921,8 +928,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
   }
 
   void _deleteCurrentStory(Map<String, dynamic> storyData) async {
-    _timer?.cancel();
-    _videoController?.pause();
+    _pauseStory();
 
     showDialog(
       context: context,
@@ -933,7 +939,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
           TextButton(
               onPressed: () {
                 Navigator.pop(c);
-                _showStory();
+                _resumeStory();
               },
               child: const Text("ຍົກເລີກ")),
           TextButton(
@@ -948,10 +954,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                 await deleteFromCloudinary(url, isVideo);
               }
 
-              await FirebaseFirestore.instance
-                  .collection('stories')
-                  .doc(storyId)
-                  .delete();
+              await FirebaseFirestore.instance.collection('stories').doc(storyId).delete();
 
               final grp = widget.storyGroups[currentGroupIdx];
               grp.stories.removeAt(currentStoryIdx);
@@ -965,8 +968,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                   currentGroupIdx = widget.storyGroups.length - 1;
                 currentStoryIdx = 0;
               } else {
-                if (currentStoryIdx >= grp.stories.length)
-                  currentStoryIdx = grp.stories.length - 1;
+                if (currentStoryIdx >= grp.stories.length) currentStoryIdx = grp.stories.length - 1;
               }
               _showStory();
             },
@@ -979,8 +981,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.storyGroups.isEmpty)
-      return const Scaffold(backgroundColor: Colors.black);
+    if (widget.storyGroups.isEmpty) return const Scaffold(backgroundColor: Colors.black);
     final group = widget.storyGroups[currentGroupIdx];
     final story = group.stories[currentStoryIdx];
     final isVideo = story['mediaType'] == 'video';
@@ -990,6 +991,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
+        onTapDown: (_) => _pauseStory(),
         onTapUp: (details) {
           final width = MediaQuery.of(context).size.width;
           if (details.globalPosition.dx < width * 0.3) {
@@ -998,22 +1000,57 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
             _nextStory();
           }
         },
+        onTapCancel: () => _resumeStory(),
+        onLongPressStart: (_) => _pauseStory(),
+        onLongPressEnd: (_) => _resumeStory(),
+        onVerticalDragUpdate: (details) {
+          if (details.delta.dy > 10) {
+            Navigator.pop(context);
+          }
+        },
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null && details.primaryVelocity! > 200) {
+            _prevStory();
+          } else if (details.primaryVelocity != null && details.primaryVelocity! < -200) {
+            _nextStory();
+          } else {
+            _resumeStory();
+          }
+        },
         child: Stack(
+          fit: StackFit.expand,
           children: [
+            Container(color: Colors.transparent),
             Center(
-              child: isVideo
-                  ? (_videoController != null &&
-                          _videoController!.value.isInitialized
-                      ? AspectRatio(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (isVideo)
+                    Image.network(
+                      getMiddleFrameThumbnail(story['storyImage'] ?? ''),
+                      fit: BoxFit.contain,
+                      errorBuilder: (c, e, s) => Container(color: Colors.black),
+                    ),
+                  if (isVideo)
+                    if (_videoController != null && _videoController!.value.isInitialized)
+                      Center(
+                        child: AspectRatio(
                           aspectRatio: _videoController!.value.aspectRatio,
-                          child: VideoPlayer(_videoController!))
-                      : const CircularProgressIndicator(color: Colors.white))
-                  : Image.network(story['storyImage'] ?? '',
+                          child: VideoPlayer(_videoController!),
+                        ),
+                      )
+                    else
+                      const Center(child: CircularProgressIndicator(color: Colors.white))
+                  else
+                    Image.network(
+                      story['storyImage'] ?? '',
                       fit: BoxFit.contain,
                       width: double.infinity,
                       height: double.infinity,
-                      errorBuilder: (c, e, s) =>
-                          const Icon(Icons.broken_image, color: Colors.white)),
+                      errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white),
+                    ),
+                ],
+              ),
             ),
             Positioned(
               top: 50,
@@ -1032,8 +1069,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                           height: 3,
                           margin: const EdgeInsets.symmetric(horizontal: 2),
                           decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(2)),
+                              color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                           child: FractionallySizedBox(
                               alignment: Alignment.centerLeft,
                               widthFactor: p,
@@ -1046,31 +1082,43 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: Colors.grey[700],
-                            backgroundImage: (group.userAvatar.isNotEmpty &&
-                                    group.userAvatar.startsWith('http'))
-                                ? NetworkImage(group.userAvatar)
-                                : const AssetImage('assets/default.jpg')
-                                    as ImageProvider,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(isMyStory ? "ສະຕໍຣີ່ຂອງທ່ານ" : group.userName,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15)),
-                        ],
+                      // 🔹 กดไปที่ ProfilePage
+                      GestureDetector(
+                        onTap: () {
+                          _pauseStory();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProfilePage(targetUserId: group.userId),
+                            ),
+                          ).then((_) {
+                            if (mounted) {
+                              _resumeStory();
+                            }
+                          });
+                        },
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: Colors.grey[700],
+                              backgroundImage: (group.userAvatar.isNotEmpty &&
+                                      group.userAvatar.startsWith('http'))
+                                  ? NetworkImage(group.userAvatar)
+                                  : const AssetImage('assets/default.jpg') as ImageProvider,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(isMyStory ? "ສະຕໍຣີ່ຂອງທ່ານ" : group.userName,
+                                style: const TextStyle(
+                                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          ],
+                        ),
                       ),
                       Row(
                         children: [
                           if (isMyStory)
                             PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert,
-                                  color: Colors.white),
+                              icon: const Icon(Icons.more_vert, color: Colors.white),
                               color: Colors.grey[900],
                               offset: const Offset(0, 40),
                               onSelected: (value) {
@@ -1086,8 +1134,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                                       Icon(Icons.delete, color: Colors.redAccent),
                                       SizedBox(width: 8),
                                       Text('ລົບສະຕໍຣີ່',
-                                          style:
-                                              TextStyle(color: Colors.redAccent)),
+                                          style: TextStyle(color: Colors.redAccent)),
                                     ],
                                   ),
                                 ),
@@ -1103,8 +1150,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                 ],
               ),
             ),
-
-            // 🌟 ส่วนควบคุมด้านล่าง (ปุ่มเช็คคนดู / แถบส่งอีโมจิฟีลลิ่ง Facebook)
             Positioned(
               bottom: 40,
               left: 16,
@@ -1130,10 +1175,10 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                             ),
                             icon: const Icon(Icons.visibility, size: 18, color: Colors.tealAccent),
-                            label: Text("ຄົນເບິ່ງ $count ຄົນ", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            label: Text("ຄົນເບິ່ງ $count ຄົນ",
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                             onPressed: () {
-                              _timer?.cancel();
-                              _videoController?.pause();
+                              _pauseStory();
                               _showViewersListBottomSheet(story['storyDocId']);
                             },
                           );
@@ -1153,7 +1198,8 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                           const Expanded(
                             child: Padding(
                               padding: EdgeInsets.only(left: 8.0),
-                              child: Text("ສົ່ງຄຳເຫັນ...", style: TextStyle(color: Colors.white60, fontSize: 13)),
+                              child: Text("ສົ່ງຄຳເຫັນ...",
+                                  style: TextStyle(color: Colors.white60, fontSize: 13)),
                             ),
                           ),
                           Row(
@@ -1176,7 +1222,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     );
   }
 
-  // ตัววิดเจ็ตสำหรับสร้างปุ่มกดอีโมจิแต่ละตัว
   Widget _buildEmojiItem(String emoji, String storyId) {
     return GestureDetector(
       onTap: () => _sendEmojiReaction(storyId, emoji),

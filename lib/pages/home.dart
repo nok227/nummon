@@ -490,7 +490,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 30),
+                  padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 20),
                   decoration: const BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.vertical(bottom: Radius.circular(32))),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -602,11 +602,11 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        "ຊອກຫາສະຖານທີ່ໃໝ່ໆ",
-                        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
+                      // const SizedBox(height: 6),
+                      // const Text(
+                      //   "ຊອກຫາສະຖານທີ່ໃໝ່ໆ",
+                      //   style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      // ),
                       if (_isSearchVisible) ...[
                         const SizedBox(height: 16),
                         Container(
