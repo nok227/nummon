@@ -23,23 +23,23 @@ class TouristAttractionsPage extends StatefulWidget {
 class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
   String selectedDistrict = 'ທັງໝົດ';
 
+  final List<String> uniqueDistricts = const [
+    'ທັງໝົດ',
+    'ເມືອງໄຊຍະບູລີ',
+    'ເມືອງຂອບ',
+    'ເມືອງຫົງສາ',
+    'ເມືອງເງິນ',
+    'ເມືອງຊຽງຮ່ອນ',
+    'ເມືອງພຽງ',
+    'ເມືອງປາກລາຍ',
+    'ເມືອງແກ່ນທ້າວ',
+    'ເມືອງບໍ່ແຕນ',
+    'ເມືອງທົ່ງມີໄຊ',
+    'ເມືອງໄຊສະຖານ',
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final uniqueDistricts = [
-      'ທັງໝົດ',
-      'ເມືອງໄຊຍະບູລີ',
-      'ເມືອງຂອບ',
-      'ເມືອງຫົງສາ',
-      'ເມືອງເງິນ',
-      'ເມືອງຊຽງຮ່ອນ',
-      'ເມືອງພຽງ',
-      'ເມືອງປາກລາຍ',
-      'ເມືອງແກ່ນທ້າວ',
-      'ເມືອງບໍ່ແຕນ',
-      'ເມືອງທົ່ງມີໄຊ',
-      'ເມືອງໄຊສະຖານ',
-    ].toSet().toList();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('ເມືອງທັງໝົດ',
@@ -74,9 +74,7 @@ class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
                         color: isSelected ? Colors.white : Colors.black87),
                     onSelected: (bool selected) {
                       if (selected) {
-                        setState(() {
-                          selectedDistrict = district;
-                        });
+                        setState(() => selectedDistrict = district);
                       }
                     },
                   ),
@@ -85,11 +83,12 @@ class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
             ),
           ),
 
-          // Place list
+          // Place list — ใช้ StreamBuilder เพื่อ realtime update
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('places')
+                  .orderBy('name')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -101,24 +100,8 @@ class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
                       child: Text("ບໍ່ມີຂໍ້ມູນສະຖານທີ່ທ່ອງທ່ຽວ"));
                 }
 
-                final docs = snapshot.data!.docs;
-
-                final allPlaces = docs.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  return Place(
-                    id: doc.id,
-                    name: data['name'] ?? '',
-                    district: data['district'] ?? '',
-                    description: data['description'] ?? '',
-                    imageUrl: data['imageUrl'] ?? '',
-                    imageUrls: (data['imageUrls'] as List?)
-                        ?.map((e) => e.toString())
-                        .toList(),
-                    latitude:
-                        double.tryParse(data['latitude'].toString()) ?? 0.0,
-                    longitude:
-                        double.tryParse(data['longitude'].toString()) ?? 0.0,
-                  );
+                final allPlaces = snapshot.data!.docs.map((doc) {
+                  return Place.fromMap(doc.id, doc.data() as Map<String, dynamic>);
                 }).toList();
 
                 final filteredPlaces = allPlaces.where((place) {
@@ -153,7 +136,6 @@ class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
                                     const Icon(Icons.broken_image, size: 60),
                               ),
                             ),
-                            // badge จำนวนรูป
                             if ((place.imageUrls?.length ?? 0) > 1)
                               Positioned(
                                 bottom: 0,
@@ -185,7 +167,8 @@ class _TouristAttractionsPageState extends State<TouristAttractionsPage> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => PlaceDetailPage(
-                                place: place,
+                                // ✅ ใช้ placeId แทน place object
+                                placeId: place.id,
                                 onAddToPlan: widget.onAddToPlan,
                               ),
                             ),
