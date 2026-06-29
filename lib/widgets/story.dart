@@ -532,10 +532,6 @@ class _StorySectionState extends State<StorySection> {
                                             errorBuilder: (c, e, s) => Container(color: Colors.black87),
                                           ),
                                           Container(color: Colors.black26),
-                                          const Center(
-                                            child: Icon(Icons.play_circle_fill,
-                                                color: Colors.white, size: 32),
-                                          ),
                                         ],
                                       )
                                     : Image.network(
@@ -1057,7 +1053,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                       Center(
                         child: AspectRatio(
                           aspectRatio: _videoController!.value.aspectRatio,
-                          child: VideoPlayer(_videoController!),
+                          // child: VideoPlayer(_videoController!),
                         ),
                       )
                     else

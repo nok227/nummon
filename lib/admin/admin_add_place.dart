@@ -171,14 +171,18 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
   // ──────────────────────────────────────────────────────────────
   Future<void> _pickImages() async {
     try {
-      final List<XFile> images = await _picker.pickMultiImage();
+      final List<XFile> images = await _picker.pickMultiImage(
+        imageQuality: 70,
+        maxWidth: 1920,
+      );
       if (images.isNotEmpty) {
         setState(() {
           _selectedImages.addAll(images);
           final total = _existingImageUrls.length + _selectedImages.length;
           if (total > 15) {
             final canAdd = 15 - _existingImageUrls.length;
-            _selectedImages = _selectedImages.sublist(0, canAdd.clamp(0, _selectedImages.length));
+            _selectedImages = _selectedImages.sublist(
+                0, canAdd.clamp(0, _selectedImages.length));
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('ສູງສຸດ 15 ຮູບ')),
             );
@@ -208,7 +212,10 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             Future<void> pickSubImages() async {
-              final List<XFile> imgs = await _picker.pickMultiImage();
+              final List<XFile> imgs = await _picker.pickMultiImage(
+                imageQuality: 70,
+                maxWidth: 1920,
+              );
               if (imgs.isNotEmpty) {
                 setSheetState(() {
                   draft.images.addAll(imgs);
@@ -224,8 +231,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
             Future<void> pickSubLocation() async {
               final ll.LatLng? result = await Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => const MapPickerPage()),
+                MaterialPageRoute(builder: (context) => const MapPickerPage()),
               );
               if (result != null) {
                 setSheetState(() => draft.location = result);
@@ -382,7 +388,8 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                               color: Colors.teal, fontWeight: FontWeight.bold),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.teal, width: 1.5),
+                          side:
+                              const BorderSide(color: Colors.teal, width: 1.5),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8)),
                         ),
@@ -448,6 +455,9 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
   // ──────────────────────────────────────────────────────────────
   // อัปโหลดรูปเดียว
   // ──────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+  // ອັບໂຫລດຮູບດຽວ (ແກ້ໄຂເພື່ອເບິ່ງ Error)
+  // ──────────────────────────────────────────────────────────────
   Future<String> _uploadOneImage(XFile file) async {
     const cloudName = CloudinaryConfig.cloudName;
     const uploadPreset = CloudinaryConfig.cloudinaryUploadPreset;
@@ -456,13 +466,20 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
     var request = http.MultipartRequest("POST", uri);
     request.fields['upload_preset'] = uploadPreset;
     request.files.add(await http.MultipartFile.fromPath('file', file.path));
+    
     var response = await request.send();
+    
+    // ອ່ານຄ່າຄຳຕອບກັບຈາກ Cloudinary ທັງໝົດ
+    var responseData = await response.stream.toBytes();
+    var responseString = String.fromCharCodes(responseData);
+
     if (response.statusCode == 200) {
-      var responseData = await response.stream.toBytes();
-      var result = json.decode(String.fromCharCodes(responseData));
+      var result = json.decode(responseString);
       return result['secure_url'] as String;
     } else {
-      throw Exception("ອັບໂຫລດຮູບບໍ່ສຳເລັດ");
+      // ປິຼ້ນ Error ທີ່ Cloudinary ສົ່ງກັບມາອອກເບິ່ງໃນ Console ທາງລຸ່ມ
+      debugPrint("❌ Cloudinary Error: $responseString (Status: ${response.statusCode})");
+      throw Exception("ອັບໂຫລດຮູບບໍ່ສຳເລັດ: $responseString");
     }
   }
 
@@ -472,8 +489,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
   Future<void> _savePlace() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final totalMainImages =
-        _existingImageUrls.length + _selectedImages.length;
+    final totalMainImages = _existingImageUrls.length + _selectedImages.length;
     if (totalMainImages == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ກະລຸນາເລືອກຮູບພາບຢ່າງໜ້ອຍ 1 ຮູບ')),
@@ -546,17 +562,14 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
         'name': _nameController.text.trim(),
         'district': _selectedDistrict,
         'description': _descriptionController.text.trim(),
-        'latitude':
-            double.tryParse(_latitudeController.text.trim()) ?? 0.0,
-        'longitude':
-            double.tryParse(_longitudeController.text.trim()) ?? 0.0,
+        'latitude': double.tryParse(_latitudeController.text.trim()) ?? 0.0,
+        'longitude': double.tryParse(_longitudeController.text.trim()) ?? 0.0,
         'imageUrl': allMainUrls.isNotEmpty ? allMainUrls.first : '',
         'imageUrls': allMainUrls,
         'extraPlaces': extraPlacesData,
         // คงค่า imageAlignmentY เดิมไว้ (ถ้าเป็น edit mode)
-        'imageAlignmentY': _isEditMode
-            ? (widget.editPlace!.imageAlignmentY)
-            : 0.0,
+        'imageAlignmentY':
+            _isEditMode ? (widget.editPlace!.imageAlignmentY) : 0.0,
         if (!_isEditMode) 'createdAt': FieldValue.serverTimestamp(),
         if (_isEditMode) 'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -613,6 +626,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+    ;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -668,8 +682,8 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                     // ── ส่วนรูปภาพหลัก ──
                     const Text(
                       'ຮູບພາບສະຖານທີ່ (ສູງສຸດ 15 ຮູບ) *',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 10),
                     Container(
@@ -701,8 +715,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                                   final i = entry.key;
                                   final url = entry.value;
                                   return Padding(
-                                    padding:
-                                        const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.only(right: 8),
                                     child: Stack(
                                       children: [
                                         ClipRRect(
@@ -720,8 +733,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                                           right: 2,
                                           child: GestureDetector(
                                             onTap: () => setState(() =>
-                                                _existingImageUrls
-                                                    .removeAt(i)),
+                                                _existingImageUrls.removeAt(i)),
                                             child: Container(
                                               decoration: const BoxDecoration(
                                                   color: Colors.red,
@@ -755,15 +767,11 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                                   );
                                 }),
                                 // รูปใหม่ (XFile)
-                                ..._selectedImages
-                                    .asMap()
-                                    .entries
-                                    .map((entry) {
+                                ..._selectedImages.asMap().entries.map((entry) {
                                   final i = entry.key;
                                   final img = entry.value;
                                   return Padding(
-                                    padding:
-                                        const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.only(right: 8),
                                     child: Stack(
                                       children: [
                                         ClipRRect(
@@ -805,8 +813,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                                       height: 140,
                                       decoration: BoxDecoration(
                                         color: Colors.teal[50],
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Icon(Icons.add,
                                           color: Colors.teal, size: 40),
@@ -845,12 +852,11 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                       ),
                       hint: const Text('ກະລຸນາເລືອກ ເມືອງ'),
                       items: _districts
-                          .map((d) =>
-                              DropdownMenuItem(value: d, child: Text(d)))
+                          .map(
+                              (d) => DropdownMenuItem(value: d, child: Text(d)))
                           .toList(),
                       onChanged: (v) => setState(() => _selectedDistrict = v),
-                      validator: (v) =>
-                          v == null ? 'ກະລຸນາເລືອກ ເມືອງ' : null,
+                      validator: (v) => v == null ? 'ກະລຸນາເລືອກ ເມືອງ' : null,
                     ),
                     const SizedBox(height: 16),
 
@@ -874,17 +880,15 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                       height: 46,
                       child: OutlinedButton.icon(
                         onPressed: _openMapToPickLocation,
-                        icon: const Icon(Icons.location_on,
-                            color: Colors.red),
+                        icon: const Icon(Icons.location_on, color: Colors.red),
                         label: const Text(
                           'ປັກໝຸດພິກັດຈາກແຜນທີ່',
                           style: TextStyle(
-                              color: Colors.teal,
-                              fontWeight: FontWeight.bold),
+                              color: Colors.teal, fontWeight: FontWeight.bold),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(
-                              color: Colors.teal, width: 1.5),
+                          side:
+                              const BorderSide(color: Colors.teal, width: 1.5),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8)),
                         ),
@@ -949,8 +953,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                               TileLayer(
                                 urlTemplate:
                                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                userAgentPackageName:
-                                    'com.example.abc_new',
+                                userAgentPackageName: 'com.example.abc_new',
                               ),
                               MarkerLayer(
                                 markers: [
@@ -971,14 +974,18 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                     ],
 
                     // ── จุดย่อย ──
+                    // ── ຈຸດຍ່ອຍ ──
                     const Divider(height: 28),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'ຈຸດທ່ອງທ່ຽວຍ່ອຍ (ປັກໝຸດ + ແນບຮູບໄດ້)',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
+                        // ໃຫ້ແກ້ໄຂໂດຍການເພີ່ມ Expanded ຫໍ່ Text ໄວ້ບ່ອນນີ້
+                        Expanded(
+                          child: const Text(
+                            'ຈຸດທ່ອງທ່ຽວຍ່ອຍ (ປັກໝຸດ + ແນບຮູບໄດ້)',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
                         ),
                         TextButton.icon(
                           onPressed: () => _openExtraPlaceDialog(),
@@ -993,8 +1000,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: Text('ຍັງບໍ່ມີຈຸດທ່ອງທ່ຽວຍ່ອຍ',
-                            style: TextStyle(
-                                color: Colors.grey, fontSize: 13)),
+                            style: TextStyle(color: Colors.grey, fontSize: 13)),
                       )
                     else
                       ListView.builder(
@@ -1057,8 +1063,7 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                                   IconButton(
                                     icon: const Icon(Icons.delete,
                                         color: Colors.red, size: 20),
-                                    onPressed: () =>
-                                        _removeExtraPlace(index),
+                                    onPressed: () => _removeExtraPlace(index),
                                   ),
                                 ],
                               ),
@@ -1079,8 +1084,8 @@ class _AdminAddPlacePageState extends State<AdminAddPlacePage> {
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
-                        icon: const Icon(Icons.cloud_upload,
-                            color: Colors.white),
+                        icon:
+                            const Icon(Icons.cloud_upload, color: Colors.white),
                         label: Text(
                           _isEditMode
                               ? 'ອັບເດດ ແລະ ບັນທຶກການແກ້ໄຂ'

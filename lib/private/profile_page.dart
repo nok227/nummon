@@ -8,7 +8,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'edit_profile_page.dart';
 import 'add_highlight_page.dart';
 import '../routes/map.dart';
-import '../auth/login_screen.dart'; // 🔹 import หน้า Login
+import '../auth/login_screen.dart';
+
+// ─── import ปุ่มแชทและหน้าแชท ───
+import '../chats/inquiry_button.dart';
+import '../chats/chat_list_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? targetUserId;
@@ -50,7 +54,6 @@ class _ProfilePageState extends State<ProfilePage> {
         if (doc.exists && mounted) {
           setState(() {
             userData = doc.data();
-            print('📦 ProfilePage userData keys: ${userData?.keys}');
             highlights = userData?['highlights'] ?? [];
           });
         } else if (mounted) {
@@ -234,7 +237,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 🔧 ฟังก์ชัน Logout ที่ปรับปรุงให้เคลียร์ Google และนำทางไปหน้า Login
   void _logout() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -265,22 +267,16 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) Navigator.pop(context);
 
     try {
-      // 1. Sign out from Google (ถ้าใช้)
       final GoogleSignIn googleSignIn = GoogleSignIn();
       if (await googleSignIn.isSignedIn()) {
         await googleSignIn.signOut();
       }
-
-      // 2. Sign out from Firebase
       await FirebaseAuth.instance.signOut();
-
-      // 3. นำทางไปหน้า Login และล้าง Stack ทั้งหมด
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
           (route) => false,
         );
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("ອອກຈາກລະບົບສຳເລັດ"), backgroundColor: Colors.green),
         );
@@ -301,16 +297,8 @@ class _ProfilePageState extends State<ProfilePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // ✅ รองรับทั้ง photoUrl และ photoURL
-    final photoUrl = userData!['photoUrl'] ??
-        userData!['photoURL'] ??
-        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=300';
-
-    // ✅ รองรับทั้ง coverUrl และ coverURL
-    final coverUrl = userData!['coverUrl'] ??
-        userData!['coverURL'] ??
-        'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600';
-
+    final photoUrl = userData!['photoUrl'] ?? userData!['photoURL'] ?? '';
+    final coverUrl = userData!['coverUrl'] ?? userData!['coverURL'] ?? '../assets/default.jpg';
     final displayName = userData!['displayName'] ?? 'User';
     final bio = userData!['bio'] ?? '';
 
@@ -321,21 +309,77 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-          if (isMe)
+          // ─── ปุ่มแชท ───
+          if (!isMe)
             IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const EditProfilePage()),
-              ),
-              tooltip: "ແກ້ໄຂໂພຣໄຟລ໌",
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {
+                final inquiryBtn = InquiryButton(
+                  targetUserId: targetId!,
+                  targetName: displayName,
+                  targetPhotoUrl: photoUrl,
+                );
+                inquiryBtn.openChat(context);
+              },
+              tooltip: 'ສົ່ງຂໍ້ຄວາມ',
             ),
           if (isMe)
             IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: _logout,
-              tooltip: "ອອກຈາກລະບົບ",
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatListScreen()),
+                );
+              },
+              tooltip: 'ແຊດຂອງທ່ານ',
             ),
+          // ─── เมนู 3 จุด ───
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'edit' && isMe) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const EditProfilePage()),
+                );
+              } else if (value == 'logout' && isMe) {
+                _logout();
+              } else if (value == 'chat' && !isMe) {
+                final inquiryBtn = InquiryButton(
+                  targetUserId: targetId!,
+                  targetName: displayName,
+                  targetPhotoUrl: photoUrl,
+                );
+                inquiryBtn.openChat(context);
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+
+              if (!isMe)
+                PopupMenuItem<String>(
+                  value: 'chat',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chat_bubble_outline, color: Colors.teal, size: 20),
+                      const SizedBox(width: 12),
+                      Text('ສົ່ງຂໍ້ຄວາມຫາ $displayName', style: const TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
+              if (isMe)
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.red, size: 20),
+                      SizedBox(width: 12),
+                      Text('ອອກຈາກລະບົບ', style: TextStyle(fontSize: 14, color: Colors.red)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -404,6 +448,48 @@ class _ProfilePageState extends State<ProfilePage> {
                   Text(displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   if (bio.isNotEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(bio, style: const TextStyle(color: Colors.grey))),
                   const SizedBox(height: 12),
+
+                  // ─── ปุ่มแชท (InquiryButton) ───
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (!isMe) ...[
+                          Expanded(
+                            child: InquiryButton(
+                              targetUserId: targetId!,
+                              targetName: displayName,
+                              targetPhotoUrl: photoUrl,
+                            ),
+                          ),
+                        ],
+                        if (isMe) ...[
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const EditProfilePage()),
+                              ),
+                              icon: const Icon(Icons.edit, size: 20),
+                              label: const Text(
+                                'ແກ້ໄຂໂພຣໄຟລ໌',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -639,7 +725,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 8),
 
-            // ─── โพสต์ที่แชร์ ───
+            // ─── ໂພສຕ໌ທີ່ແຊຣ໌ ───
             Container(
               color: Colors.white,
               width: double.infinity,
@@ -651,7 +737,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 stream: FirebaseFirestore.instance
                     .collection('user_posts')
                     .where('userId', isEqualTo: targetId)
-                    .orderBy('createdAt', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -664,7 +749,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     );
                   }
 
-                  final posts = snapshot.data!.docs;
+                  final posts = snapshot.data!.docs.toList();
+                  posts.sort((a, b) {
+                    final aData = a.data() as Map<String, dynamic>;
+                    final bData = b.data() as Map<String, dynamic>;
+                    final aTime = aData['createdAt'] as Timestamp?;
+                    final bTime = bData['createdAt'] as Timestamp?;
+                    if (aTime == null && bTime == null) return 0;
+                    if (aTime == null) return 1;
+                    if (bTime == null) return -1;
+                    return bTime.compareTo(aTime);
+                  });
+
                   return ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -672,7 +768,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     itemBuilder: (context, index) {
                       final data = posts[index].data() as Map<String, dynamic>;
                       final postId = posts[index].id;
-
                       data['id'] = postId;
 
                       final title = data['title'] ?? '';

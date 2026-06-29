@@ -8,11 +8,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-      apiKey: "AIzaSyBhmpBpL6rsu2CFxp_-AnpA_KyUa3pLvbs",
-      appId: "1:447844170700:android:351a8b0df679a0aef63b69",
-      messagingSenderId: "447844170700",
-      projectId: "my-app-7eb60",
-      storageBucket: "my-app-7eb60.firebasestorage.app",
+      // ⚠️ ให้เอา Web API Key ของโปรเจกต์ Nummon มาใส่ตรงนี้ครับ
+      apiKey: "AIzaSyDZp6bkYDu1cqyMeOMNEwQ8PJyjks2ydik", 
+      
+      // ⚠️ ให้เอา App ID ของแอป com.phakin.aii มาใส่ตรงนี้ครับ (จะขึ้นต้นด้วย 1:479832480739:android:...)
+      appId: "1:479832480739:android:0eda3881e1dcb91f82ded6", 
+      
+      messagingSenderId: "479832480739",                   // อัปเดตแล้ว (ใช้ Project number)
+      projectId: "nummon-8b175",                           // อัปเดตแล้ว (ใช้ Project ID)
+      storageBucket: "nummon-8b175.firebasestorage.app",   // อัปเดตแล้ว (ใช้ตามโครงสร้าง Project ID ใหม่)
     ),
   );
   // await Firebase.initializeApp();

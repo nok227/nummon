@@ -1,11 +1,17 @@
 // lib/app_config.dart
 class CloudinaryConfig {
-  static const String cloudName = "Root"; // เปลี่ยนเป็น Cloud Name ของคุณ
-  static const String apiKey = "271696571532427"; // เปลี่ยนเป็น API Key ของคุณ
-  static const String apiSecret ="q7BIw0BsfNA94ZCsqEqqnpSm-Dk"; // เปลี่ยนเป็น API Secret ของคุณ
+  // 1. แก้ไขจาก "nummon_no1" เป็น "aqfrs8hx" ตามที่ปรากฏในหน้าเว็บของคุณ
+  static const String cloudName = "aqfrs8hx"; 
+  static const String apiKey = "785729656554638"; 
+  static const String apiSecret =
+      "YOGYjgUFihAo-QTdmTQG4BhcKY4"; 
+
   // models/api_cloudinary.dart
-  static const String cloudinaryCloudName = "duo2b46ro";
-  static const String cloudinaryApiKey = "271696571532427";
-  static const String cloudinaryApiSecret = "q7BIw0BsfNA94ZCsqEqqnpSm-Dk";
-  static const String cloudinaryUploadPreset = "travel_app_preset";
+  // 2. แก้ไขจุดนี้ให้เป็นชื่อเดียวกันด้วยครับ
+  static const String cloudinaryCloudName = "aqfrs8hx";
+  static const String cloudinaryApiKey =
+      "785729656554638"; 
+  static const String cloudinaryApiSecret =
+      "YOGYjgUFihAo-QTdmTQG4BhcKY4"; 
+  static const String cloudinaryUploadPreset = "Nummon";
 }
