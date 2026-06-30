@@ -8,6 +8,7 @@ import '../ci/comment_service.dart';
 import '../models/comment_model.dart';
 import '../ci/reaction_picker.dart';
 import '../models/emoji_storage.dart';
+import '../private/profile_page.dart';
 
 class ExplorePage extends StatefulWidget {
   final ScrollController scrollController;
@@ -54,49 +55,56 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
-  Future<void> _loadMore() async {
+Future<void> _loadMore() async {
     if (_isLoading || !_hasMore) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
 
-    Query query = FirebaseFirestore.instance
-        .collection('user_posts')
-        .orderBy('createdAt', descending: true)
-        .limit(_pageSize);
+    try {
+      Query query = FirebaseFirestore.instance
+          .collection('user_posts')
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize);
 
-    if (_lastDoc != null) {
-      query = query.startAfterDocument(_lastDoc!);
-    }
+      if (_lastDoc != null) {
+        query = query.startAfterDocument(_lastDoc!);
+      }
 
-    final snap = await query.get();
-    if (!mounted) return;
+      final querySnapshot = await query.get();
 
-    if (snap.docs.isEmpty) {
+      if (querySnapshot.docs.isNotEmpty) {
+        _lastDoc = querySnapshot.docs.last;
+        
+        // เก็บข้อมูลลงใน _latestPerUser ไว้ด้วยเพื่อป้องกันไม่ให้ Widget ส่วนอื่นในหน้าจอเกิดตัวแดง (Error)
+        for (var doc in querySnapshot.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final uId = data['userId'] ?? '';
+          if (uId.isNotEmpty) {
+            _latestPerUser[uId] = doc;
+          }
+        }
+
+        setState(() {
+          // เพิ่มโพสต์ทั้งหมดที่ดึงมาเข้าสู่รายการ _docs ตรงๆ เพื่อนำไปแสดงผลบนหน้า Explore ทันที
+          _docs.addAll(querySnapshot.docs);
+          _isLoading = false;
+          _initialLoaded = true;
+        });
+      } else {
+        setState(() {
+          _hasMore = false;
+          _isLoading = false;
+          _initialLoaded = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading posts: $e');
       setState(() {
-        _hasMore = false;
         _isLoading = false;
         _initialLoaded = true;
       });
-      return;
     }
-
-    final newDocs = snap.docs;
-    _lastDoc = newDocs.last;
-
-    for (final doc in newDocs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final uid = data['userId'] as String? ?? '';
-      if (uid.isEmpty) continue;
-      if (!_latestPerUser.containsKey(uid)) {
-        _latestPerUser[uid] = doc;
-        _docs.add(doc);
-      }
-    }
-
-    setState(() {
-      _isLoading = false;
-      _initialLoaded = true;
-      if (snap.docs.length < _pageSize) _hasMore = false;
-    });
   }
 
   Future<void> _refresh() async {
@@ -130,7 +138,8 @@ class _ExplorePageState extends State<ExplorePage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.explore_off, size: 72, color: Colors.grey[400]),
+                      Icon(Icons.explore_off,
+                          size: 72, color: Colors.grey[400]),
                       const SizedBox(height: 12),
                       Text(
                         "ຍັງບໍ່ມີໂພສຕ໌ໃດໃນຕອນນີ້",
@@ -153,7 +162,9 @@ class _ExplorePageState extends State<ExplorePage> {
                       if (index == _docs.length) {
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Center(child: CircularProgressIndicator(color: Colors.teal, strokeWidth: 2)),
+                          child: Center(
+                              child: CircularProgressIndicator(
+                                  color: Colors.teal, strokeWidth: 2)),
                         );
                       }
                       final doc = _docs[index];
@@ -172,8 +183,10 @@ class _ExplorePageState extends State<ExplorePage> {
 }
 
 // ─── ฟังก์ชันเปิดดูรูปภาพเต็มจอ ───
-void _showImagePreview(BuildContext context, List<String> images, int initialIndex) {
-  final PageController pageController = PageController(initialPage: initialIndex);
+void _showImagePreview(
+    BuildContext context, List<String> images, int initialIndex) {
+  final PageController pageController =
+      PageController(initialPage: initialIndex);
   showDialog(
     context: context,
     builder: (context) {
@@ -191,7 +204,8 @@ void _showImagePreview(BuildContext context, List<String> images, int initialInd
                     child: PageView.builder(
                       controller: pageController,
                       itemCount: images.length,
-                      onPageChanged: (index) => setState(() => currentIndex = index),
+                      onPageChanged: (index) =>
+                          setState(() => currentIndex = index),
                       itemBuilder: (context, i) {
                         return InteractiveViewer(
                           maxScale: 4.0,
@@ -203,20 +217,29 @@ void _showImagePreview(BuildContext context, List<String> images, int initialInd
                 ),
                 if (images.length > 1)
                   Positioned(
-                    top: 45, left: 0, right: 0,
+                    top: 45,
+                    left: 0,
+                    right: 0,
                     child: Center(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20)),
                         child: Text('${currentIndex + 1} / ${images.length}',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
                 Positioned(
-                  top: 40, right: 20,
+                  top: 40,
+                  right: 20,
                   child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    icon:
+                        const Icon(Icons.close, color: Colors.white, size: 30),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -259,14 +282,16 @@ Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
           Expanded(
             child: InkWell(
               onTap: () => _showImagePreview(context, images, 0),
-              child: Image.network(images[0], fit: BoxFit.cover, cacheWidth: 500),
+              child:
+                  Image.network(images[0], fit: BoxFit.cover, cacheWidth: 500),
             ),
           ),
           const SizedBox(width: 2),
           Expanded(
             child: InkWell(
               onTap: () => _showImagePreview(context, images, 1),
-              child: Image.network(images[1], fit: BoxFit.cover, cacheWidth: 500),
+              child:
+                  Image.network(images[1], fit: BoxFit.cover, cacheWidth: 500),
             ),
           ),
         ],
@@ -293,7 +318,8 @@ Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
               Expanded(
                 child: InkWell(
                   onTap: () => _showImagePreview(context, images, 1),
-                  child: Image.network(images[1], fit: BoxFit.cover, cacheWidth: 400),
+                  child: Image.network(images[1],
+                      fit: BoxFit.cover, cacheWidth: 400),
                 ),
               ),
               const SizedBox(height: 2),
@@ -303,14 +329,18 @@ Widget _buildFacebookImageGrid(BuildContext context, List<String> images) {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(images[2], fit: BoxFit.cover, cacheWidth: 400),
+                      Image.network(images[2],
+                          fit: BoxFit.cover, cacheWidth: 400),
                       if (images.length > 3)
                         Container(
                           color: Colors.black54,
                           child: Center(
                             child: Text(
                               '+${images.length - 2}',
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
@@ -343,33 +373,34 @@ class _UserPostCard extends StatefulWidget {
   State<_UserPostCard> createState() => _UserPostCardState();
 }
 
-class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveClientMixin {
+class _UserPostCardState extends State<_UserPostCard>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
   final CommentService _commentService = CommentService();
-  
+
   // Comment state
   bool _isCommentExpanded = false;
   bool _hasOpenedComments = false;
-  
+
   // Reply state
   String? _replyingToCommentId;
   String? _replyingToUserName;
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _replyFocusNode = FocusNode();
-  
+
   // Expanded replies
   final Map<String, bool> _expandedReplies = {};
-  
+
   // Reaction
   String _selectedReaction = '';
   final LayerLink _layerLink = LayerLink();
-  
+
   // Comment input
   late final TextEditingController _commentController;
   late final FocusNode _commentFocusNode;
-  
+
   // Streams
   late final Stream<List<Comment>> _commentsStream;
   late final Stream<int> _commentCountStream;
@@ -383,10 +414,10 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
     super.initState();
     _commentController = TextEditingController();
     _commentFocusNode = FocusNode();
-    
+
     // Use postId as placeId for comments
     final placeId = widget.postId;
-    
+
     _commentsStream = _commentService.getComments(placeId);
     _commentCountStream = FirebaseFirestore.instance
         .collection('places')
@@ -406,7 +437,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
         .collection('reactions')
         .orderBy('updatedAt', descending: true)
         .snapshots();
-    
+
     _loadReaction();
   }
 
@@ -594,8 +625,8 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _commentService
-                  .deleteComment(widget.postId, commentId, replyId: replyId);
+              await _commentService.deleteComment(widget.postId, commentId,
+                  replyId: replyId);
               if (mounted) {
                 _showSnackBar('ລົບຄຳເຫັນສຳເລັດ');
               }
@@ -972,8 +1003,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
           ],
           // Replies
           StreamBuilder<List<Comment>>(
-            stream: _commentService
-                .getRepliesStream(widget.postId, comment.id),
+            stream: _commentService.getRepliesStream(widget.postId, comment.id),
             builder: (context, snapshot) {
               final replies = snapshot.data ?? [];
               final hasReplies = replies.isNotEmpty;
@@ -1123,8 +1153,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                                           children: [
                                             GestureDetector(
                                               onTap: () {
-                                                _commentService
-                                                    .toggleLike(
+                                                _commentService.toggleLike(
                                                   widget.postId,
                                                   comment.id,
                                                   true,
@@ -1218,14 +1247,17 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
     double? lng;
     if (data['latitude'] != null) lat = (data['latitude'] as num).toDouble();
     if (data['longitude'] != null) lng = (data['longitude'] as num).toDouble();
-    if (lat == null && data['lat'] != null) lat = (data['lat'] as num).toDouble();
-    if (lng == null && data['lng'] != null) lng = (data['lng'] as num).toDouble();
+    if (lat == null && data['lat'] != null)
+      lat = (data['lat'] as num).toDouble();
+    if (lng == null && data['lng'] != null)
+      lng = (data['lng'] as num).toDouble();
     return (lat, lng);
   }
 
   Future<void> _toggleLike(String currentUserId, List<String> likedBy) async {
     if (currentUserId.isEmpty) return;
-    final docRef = FirebaseFirestore.instance.collection('user_posts').doc(widget.postId);
+    final docRef =
+        FirebaseFirestore.instance.collection('user_posts').doc(widget.postId);
     if (likedBy.contains(currentUserId)) {
       await docRef.update({
         'likes': FieldValue.increment(-1),
@@ -1251,7 +1283,8 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
     final title = postData['title'] ?? '';
     final content = postData['content'] ?? '';
     final placeName = postData['placeName'] ?? '';
-    final images = (postData['images'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final images =
+        (postData['images'] as List?)?.map((e) => e.toString()).toList() ?? [];
     final createdAt = (postData['createdAt'] as Timestamp?)?.toDate();
     final likedBy = List<String>.from(postData['likedBy'] ?? []);
     final likes = postData['likes'] ?? 0;
@@ -1274,18 +1307,28 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: widget.onAddToPlan),
+                        builder: (context) => UserAllPostsPage(
+                            userId: userId, onAddToPlan: widget.onAddToPlan),
                       ),
                     );
                   },
                   child: Container(
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.teal[100]),
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: Colors.teal[100]),
                     child: ClipOval(
                       child: userAvatar.isNotEmpty
-                          ? Image.network(userAvatar, fit: BoxFit.cover, cacheWidth: 120)
-                          : Center(child: Text(userName.isNotEmpty ? userName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold))),
+                          ? Image.network(userAvatar,
+                              fit: BoxFit.cover, cacheWidth: 120)
+                          : Center(
+                              child: Text(
+                                  userName.isNotEmpty
+                                      ? userName[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                      color: Colors.teal,
+                                      fontWeight: FontWeight.bold))),
                     ),
                   ),
                 ),
@@ -1299,22 +1342,33 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserAllPostsPage(userId: userId, onAddToPlan: widget.onAddToPlan),
+                              builder: (context) => ProfilePage(
+                                targetUserId: userId, // ส่งไอดีเจ้าของโพสต์ไป
+                                onAddToPlan: widget
+                                    .onAddToPlan, // ส่งฟังก์ชันแผนการเดินทางไปด้วย
+                              ),
                             ),
                           );
                         },
-                        child: Text(userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        child: Text(userName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
                       ),
                       Row(
                         children: [
                           if (createdAt != null) ...[
-                            Text(_formatTimeAgo(createdAt), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text(_formatTimeAgo(createdAt),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey)),
                             const SizedBox(width: 4),
-                            Icon(Icons.public, size: 12, color: Colors.grey[600]),
+                            Icon(Icons.public,
+                                size: 12, color: Colors.grey[600]),
                           ],
                           if (placeName.isNotEmpty) ...[
                             const SizedBox(width: 6),
-                            const Text('•', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            const Text('•',
+                                style: TextStyle(
+                                    color: Colors.grey, fontSize: 12)),
                             const SizedBox(width: 6),
                             InkWell(
                               onTap: () {
@@ -1332,7 +1386,8 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.location_on, size: 12, color: Colors.teal),
+                                  const Icon(Icons.location_on,
+                                      size: 12, color: Colors.teal),
                                   const SizedBox(width: 2),
                                   Text(
                                     placeName,
@@ -1363,17 +1418,22 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                 if (title.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 if (content.isNotEmpty)
-                  Text(content, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.35)),
+                  Text(content,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14, color: Colors.black87, height: 1.35)),
               ],
             ),
           ),
           const SizedBox(height: 8),
 
-          if (images.isNotEmpty)
-            _buildFacebookImageGrid(context, images),
+          if (images.isNotEmpty) _buildFacebookImageGrid(context, images),
 
           // ─── Reaction Count ───
           Padding(
@@ -1436,7 +1496,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                               Text(
                                 _selectedReaction.isNotEmpty
                                     ? EmojiStorage.getLabel(_selectedReaction)
-                                    : 'ຖືກໃຈ',
+                                    : '',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -1449,9 +1509,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 20),
-
                     GestureDetector(
                       onTap: () {
                         setState(() {
@@ -1470,13 +1528,6 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                             const Icon(Icons.comment_outlined,
                                 color: Colors.grey, size: 20),
                             const SizedBox(width: 4),
-                            Text(
-                              'ຄວາມຄິດເຫັນ',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[700]),
-                            ),
                             if (!_hasOpenedComments) ...[
                               const SizedBox(width: 6),
                               StreamBuilder<int>(
@@ -1505,7 +1556,6 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                     ),
                   ],
                 ),
-
                 StreamBuilder<QuerySnapshot>(
                   stream: _recentReactionsStream,
                   builder: (context, snapshot) {
@@ -1701,9 +1751,11 @@ class UserAllPostsPage extends StatelessWidget {
     return 'ບໍ່ດົນມານີ້';
   }
 
-  Future<void> _toggleLike(String postId, List<String> likedBy, String currentUserId) async {
+  Future<void> _toggleLike(
+      String postId, List<String> likedBy, String currentUserId) async {
     if (currentUserId.isEmpty) return;
-    final docRef = FirebaseFirestore.instance.collection('user_posts').doc(postId);
+    final docRef =
+        FirebaseFirestore.instance.collection('user_posts').doc(postId);
     if (likedBy.contains(currentUserId)) {
       await docRef.update({
         'likes': FieldValue.increment(-1),
@@ -1726,8 +1778,10 @@ class UserAllPostsPage extends StatelessWidget {
     double? lng;
     if (data['latitude'] != null) lat = (data['latitude'] as num).toDouble();
     if (data['longitude'] != null) lng = (data['longitude'] as num).toDouble();
-    if (lat == null && data['lat'] != null) lat = (data['lat'] as num).toDouble();
-    if (lng == null && data['lng'] != null) lng = (data['lng'] as num).toDouble();
+    if (lat == null && data['lat'] != null)
+      lat = (data['lat'] as num).toDouble();
+    if (lng == null && data['lng'] != null)
+      lng = (data['lng'] as num).toDouble();
     return (lat, lng);
   }
 
@@ -1736,13 +1790,19 @@ class UserAllPostsPage extends StatelessWidget {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .snapshots(),
       builder: (context, userSnapshot) {
         if (userSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.teal)));
+          return const Scaffold(
+              body:
+                  Center(child: CircularProgressIndicator(color: Colors.teal)));
         }
 
-        final userData = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+        final userData =
+            userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
         final displayName = userData['displayName'] ?? 'ນັກທ່ອງທ່ຽວ';
         final photoUrl = userData['photoURL'] ?? '';
         final coverUrl = userData['coverURL'] ?? '';
@@ -1752,7 +1812,8 @@ class UserAllPostsPage extends StatelessWidget {
         return Scaffold(
           backgroundColor: const Color(0xFFEFF3F8),
           appBar: AppBar(
-            title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(displayName,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
           ),
@@ -1764,7 +1825,8 @@ class UserAllPostsPage extends StatelessWidget {
                 .snapshots(),
             builder: (context, postsSnapshot) {
               if (postsSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: Colors.teal));
+                return const Center(
+                    child: CircularProgressIndicator(color: Colors.teal));
               }
               final posts = postsSnapshot.data?.docs ?? [];
 
@@ -1782,15 +1844,18 @@ class UserAllPostsPage extends StatelessWidget {
                             children: [
                               GestureDetector(
                                 onTap: coverUrl.isNotEmpty
-                                    ? () => _showImagePreview(context, [coverUrl], 0)
+                                    ? () => _showImagePreview(
+                                        context, [coverUrl], 0)
                                     : null,
                                 child: AspectRatio(
                                   aspectRatio: 16 / 9,
                                   child: Container(
                                     color: const Color(0xFFCFE8E5),
                                     child: coverUrl.isNotEmpty
-                                        ? Image.network(coverUrl, fit: BoxFit.cover, cacheWidth: 800)
-                                        : const Icon(Icons.image, size: 42, color: Colors.teal),
+                                        ? Image.network(coverUrl,
+                                            fit: BoxFit.cover, cacheWidth: 800)
+                                        : const Icon(Icons.image,
+                                            size: 42, color: Colors.teal),
                                   ),
                                 ),
                               ),
@@ -1798,25 +1863,43 @@ class UserAllPostsPage extends StatelessWidget {
                                 bottom: -50,
                                 child: GestureDetector(
                                   onTap: photoUrl.isNotEmpty
-                                      ? () => _showImagePreview(context, [photoUrl], 0)
+                                      ? () => _showImagePreview(
+                                          context, [photoUrl], 0)
                                       : null,
                                   child: Container(
                                     width: 110,
                                     height: 110,
                                     decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white,
-                                      boxShadow: [
-                                        BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 10, offset: const Offset(0, 4))
-                                      ]
-                                    ),
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                              color: Colors.black
+                                                  .withOpacity(0.18),
+                                              blurRadius: 10,
+                                              offset: const Offset(0, 4))
+                                        ]),
                                     padding: const EdgeInsets.all(4),
                                     child: Container(
-                                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.teal[100]),
+                                      decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.teal[100]),
                                       child: ClipOval(
                                         child: photoUrl.isNotEmpty
-                                            ? Image.network(photoUrl, fit: BoxFit.cover, cacheWidth: 250)
-                                            : Center(child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal))),
+                                            ? Image.network(photoUrl,
+                                                fit: BoxFit.cover,
+                                                cacheWidth: 250)
+                                            : Center(
+                                                child: Text(
+                                                    displayName.isNotEmpty
+                                                        ? displayName[0]
+                                                            .toUpperCase()
+                                                        : '?',
+                                                    style: const TextStyle(
+                                                        fontSize: 28,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.teal))),
                                       ),
                                     ),
                                   ),
@@ -1825,11 +1908,17 @@ class UserAllPostsPage extends StatelessWidget {
                             ],
                           ),
                           const SizedBox(height: 60),
-                          Text(displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                          Text(displayName,
+                              style: const TextStyle(
+                                  fontSize: 22, fontWeight: FontWeight.bold)),
                           if (bio.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.only(top: 8, left: 32, right: 32),
-                              child: Text(bio, style: TextStyle(color: Colors.grey[700], fontSize: 14), textAlign: TextAlign.center),
+                              padding: const EdgeInsets.only(
+                                  top: 8, left: 32, right: 32),
+                              child: Text(bio,
+                                  style: TextStyle(
+                                      color: Colors.grey[700], fontSize: 14),
+                                  textAlign: TextAlign.center),
                             ),
                         ],
                       ),
@@ -1846,24 +1935,38 @@ class UserAllPostsPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                              child: Text("ໄຮໄລທ໌", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              child: Text("ໄຮໄລທ໌",
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15)),
                             ),
                             SizedBox(
                               height: 90,
                               child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
                                 itemCount: highlights.length,
                                 itemBuilder: (context, index) {
-                                  final h = Map<String, dynamic>.from(highlights[index]);
+                                  final h = Map<String, dynamic>.from(
+                                      highlights[index]);
                                   return Container(
                                     width: 70,
-                                    margin: const EdgeInsets.symmetric(horizontal: 5),
-                                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey[300]!, width: 2)),
+                                    margin: const EdgeInsets.symmetric(
+                                        horizontal: 5),
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: Colors.grey[300]!,
+                                            width: 2)),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(35),
-                                      child: Image.network(h['coverImage'] ?? '', fit: BoxFit.cover, cacheWidth: 150),
+                                      child: Image.network(
+                                          h['coverImage'] ?? '',
+                                          fit: BoxFit.cover,
+                                          cacheWidth: 150),
                                     ),
                                   );
                                 },
@@ -1873,7 +1976,8 @@ class UserAllPostsPage extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (highlights.isNotEmpty) const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  if (highlights.isNotEmpty)
+                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
                   // ─── Completed Places ───
                   SliverToBoxAdapter(
@@ -1884,8 +1988,13 @@ class UserAllPostsPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: Text("✅ ສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange)),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            child: Text("✅ ສະຖານທີ່ໆທ່ຽວແລ້ວ",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: Colors.orange)),
                           ),
                           StreamBuilder<QuerySnapshot>(
                             stream: FirebaseFirestore.instance
@@ -1896,10 +2005,14 @@ class UserAllPostsPage extends StatelessWidget {
                                 .orderBy('addedAt', descending: true)
                                 .snapshots(),
                             builder: (context, planSnapshot) {
-                              if (!planSnapshot.hasData || planSnapshot.data!.docs.isEmpty) {
+                              if (!planSnapshot.hasData ||
+                                  planSnapshot.data!.docs.isEmpty) {
                                 return const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  child: Text("ຍັງບໍ່ມີສະຖານທີ່ໆທ່ຽວແລ້ວ", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  child: Text("ຍັງບໍ່ມີສະຖານທີ່ໆທ່ຽວແລ້ວ",
+                                      style: TextStyle(
+                                          color: Colors.grey, fontSize: 13)),
                                 );
                               }
                               final completedPlaces = planSnapshot.data!.docs;
@@ -1907,21 +2020,29 @@ class UserAllPostsPage extends StatelessWidget {
                                 height: 110,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
                                   itemCount: completedPlaces.length,
                                   itemBuilder: (context, index) {
-                                    final data = completedPlaces[index].data() as Map<String, dynamic>;
+                                    final data = completedPlaces[index].data()
+                                        as Map<String, dynamic>;
                                     final imageUrl = data['imageUrl'] ?? '';
                                     final pName = data['placeName'] ?? '';
 
                                     double? pLat;
                                     double? pLng;
                                     if (data['location'] is GeoPoint) {
-                                      pLat = (data['location'] as GeoPoint).latitude;
-                                      pLng = (data['location'] as GeoPoint).longitude;
+                                      pLat = (data['location'] as GeoPoint)
+                                          .latitude;
+                                      pLng = (data['location'] as GeoPoint)
+                                          .longitude;
                                     } else {
-                                      if (data['latitude'] != null) pLat = (data['latitude'] as num).toDouble();
-                                      if (data['longitude'] != null) pLng = (data['longitude'] as num).toDouble();
+                                      if (data['latitude'] != null)
+                                        pLat = (data['latitude'] as num)
+                                            .toDouble();
+                                      if (data['longitude'] != null)
+                                        pLng = (data['longitude'] as num)
+                                            .toDouble();
                                     }
 
                                     return InkWell(
@@ -1939,17 +2060,34 @@ class UserAllPostsPage extends StatelessWidget {
                                       },
                                       child: Container(
                                         width: 90,
-                                        margin: const EdgeInsets.only(right: 10),
+                                        margin:
+                                            const EdgeInsets.only(right: 10),
                                         child: Column(
                                           children: [
                                             ClipRRect(
-                                              borderRadius: BorderRadius.circular(8),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                               child: imageUrl.isNotEmpty
-                                                  ? Image.network(imageUrl, width: 90, height: 75, fit: BoxFit.cover, cacheWidth: 150)
-                                                  : Container(width: 90, height: 75, color: Colors.grey[300], child: const Icon(Icons.place, color: Colors.orange)),
+                                                  ? Image.network(imageUrl,
+                                                      width: 90,
+                                                      height: 75,
+                                                      fit: BoxFit.cover,
+                                                      cacheWidth: 150)
+                                                  : Container(
+                                                      width: 90,
+                                                      height: 75,
+                                                      color: Colors.grey[300],
+                                                      child: const Icon(
+                                                          Icons.place,
+                                                          color:
+                                                              Colors.orange)),
                                             ),
                                             const SizedBox(height: 4),
-                                            Text(pName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                                            Text(pName,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                    fontSize: 11)),
                                           ],
                                         ),
                                       ),
@@ -1968,12 +2106,15 @@ class UserAllPostsPage extends StatelessWidget {
                   // ─── Posts ───
                   posts.isEmpty
                       ? const SliverFillRemaining(
-                          child: Center(child: Text('ຍັງບໍ່ມີໂພສຕ໌', style: TextStyle(color: Colors.grey))),
+                          child: Center(
+                              child: Text('ຍັງບໍ່ມີໂພສຕ໌',
+                                  style: TextStyle(color: Colors.grey))),
                         )
                       : SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final data = posts[index].data() as Map<String, dynamic>;
+                              final data =
+                                  posts[index].data() as Map<String, dynamic>;
                               final postId = posts[index].id;
                               return _UserPostCard(
                                 key: ValueKey(postId),

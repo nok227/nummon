@@ -492,29 +492,6 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ],
-                        if (isMe) ...[
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const EditProfilePage()),
-                              ),
-                              icon: const Icon(Icons.edit, size: 20),
-                              label: const Text(
-                                'ແກ້ໄຂໂພຣໄຟລ໌',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -1917,7 +1894,7 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                               Text(
                                 _selectedReaction.isNotEmpty
                                     ? EmojiStorage.getLabel(_selectedReaction)
-                                    : 'ຖືກໃຈ',
+                                    : '',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
@@ -1950,14 +1927,6 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                           children: [
                             const Icon(Icons.comment_outlined,
                                 color: Colors.grey, size: 20),
-                            const SizedBox(width: 4),
-                            Text(
-                              'ຄວາມຄິດເຫັນ',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[700]),
-                            ),
                             if (!_hasOpenedComments) ...[
                               const SizedBox(width: 6),
                               StreamBuilder<int>(
