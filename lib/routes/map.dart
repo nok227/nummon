@@ -132,7 +132,8 @@ class _MapPageState extends State<MapPage> {
       if (permission == LocationPermission.deniedForever) return;
 
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
       );
       if (!mounted) return;
       setState(() {
@@ -183,7 +184,8 @@ class _MapPageState extends State<MapPage> {
           final List coordinates = data['routes'][0]['geometry']['coordinates'];
           setState(() {
             _routePoints = coordinates
-                .map((coord) => ll.LatLng(coord[1].toDouble(), coord[0].toDouble()))
+                .map((coord) =>
+                    ll.LatLng(coord[1].toDouble(), coord[0].toDouble()))
                 .toList();
           });
         }
@@ -192,7 +194,9 @@ class _MapPageState extends State<MapPage> {
       debugPrint('Routing Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ບໍ່ສາມາດຄຳນວນເສັ້ນທາງໄດ້: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('ບໍ່ສາມາດຄຳນວນເສັ້ນທາງໄດ້: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -216,9 +220,11 @@ class _MapPageState extends State<MapPage> {
             ? Card(
                 key: const ValueKey('panel'),
                 elevation: 8,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: MapLayerType.values.map((layer) {
@@ -232,27 +238,36 @@ class _MapPageState extends State<MapPage> {
                         },
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: selected ? Colors.teal.withOpacity(0.15) : null,
+                            color:
+                                selected ? Colors.teal.withOpacity(0.15) : null,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(layer.icon, size: 20, color: selected ? Colors.teal : Colors.black54),
+                              Icon(layer.icon,
+                                  size: 20,
+                                  color:
+                                      selected ? Colors.teal : Colors.black54),
                               const SizedBox(width: 8),
                               Text(
                                 layer.label,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                                  color: selected ? Colors.teal : Colors.black87,
+                                  fontWeight: selected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color:
+                                      selected ? Colors.teal : Colors.black87,
                                 ),
                               ),
                               if (selected) ...[
                                 const SizedBox(width: 6),
-                                const Icon(Icons.check, size: 16, color: Colors.teal),
+                                const Icon(Icons.check,
+                                    size: 16, color: Colors.teal),
                               ]
                             ],
                           ),
@@ -336,48 +351,62 @@ class _MapPageState extends State<MapPage> {
                           shape: BoxShape.circle,
                           color: Colors.blue,
                           border: Border.all(color: Colors.white, width: 2.5),
-                          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4)],
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black38, blurRadius: 4)
+                          ],
                         ),
                       ),
                     ),
                   if (_hasPlace)
                     Marker(
                       point: _placeLatLng,
-                      width: 180,
-                      height: 90,
-                      alignment: Alignment.topCenter,
+                      width: 40, // ✅ เปลี่ยนจาก 180
+                      height: 40, // ✅ เปลี่ยนจาก 90
+                      // ❌ ลบ alignment: Alignment.topCenter ออก (หรือตั้งเป็น center)
                       child: GestureDetector(
                         onTap: () => setState(() => _showInfo = !_showInfo),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
+                            // หมุดหลัก
+                            const Icon(Icons.location_pin,
+                                color: Colors.red, size: 40),
+                            // Info bubble แสดงเมื่อกด (แสดงเหนือหมุด)
                             if (_showInfo)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: const [
-                                    BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-                                  ],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      widget.placeName ?? 'ສະຖານທີ່',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                    ),
-                                    Text(
-                                      'Lat: ${widget.latitude!.toStringAsFixed(5)}, Lng: ${widget.longitude!.toStringAsFixed(5)}',
-                                      style: const TextStyle(fontSize: 11),
-                                    ),
-                                  ],
+                              Positioned(
+                                bottom: 42, // อยู่เหนือหมุด
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 4,
+                                          offset: Offset(0, 2))
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        widget.placeName ?? 'ສະຖານທີ່',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13),
+                                      ),
+                                      Text(
+                                        'Lat: ${widget.latitude!.toStringAsFixed(5)}, Lng: ${widget.longitude!.toStringAsFixed(5)}',
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            const Icon(Icons.location_pin, color: Colors.red, size: 36),
                           ],
                         ),
                       ),
@@ -404,9 +433,15 @@ class _MapPageState extends State<MapPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.teal)),
+                        SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.teal)),
                         SizedBox(width: 12),
-                        Text('ກຳລັງຄຳນວນເສັ້ນທາງ...', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        Text('ກຳລັງຄຳນວນເສັ້ນທາງ...',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -426,7 +461,8 @@ class _MapPageState extends State<MapPage> {
                   heroTag: 'layer_toggle',
                   backgroundColor: _showLayerPanel ? Colors.teal : Colors.white,
                   foregroundColor: _showLayerPanel ? Colors.white : Colors.teal,
-                  onPressed: () => setState(() => _showLayerPanel = !_showLayerPanel),
+                  onPressed: () =>
+                      setState(() => _showLayerPanel = !_showLayerPanel),
                   child: Icon(_currentLayer.icon),
                 ),
                 const SizedBox(height: 8),
@@ -435,7 +471,8 @@ class _MapPageState extends State<MapPage> {
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.teal,
                   onPressed: () => _mapController.move(
-                      _mapController.camera.center, _mapController.camera.zoom + 1),
+                      _mapController.camera.center,
+                      _mapController.camera.zoom + 1),
                   child: const Icon(Icons.add),
                 ),
                 const SizedBox(height: 8),
@@ -444,7 +481,8 @@ class _MapPageState extends State<MapPage> {
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.teal,
                   onPressed: () => _mapController.move(
-                      _mapController.camera.center, _mapController.camera.zoom - 1),
+                      _mapController.camera.center,
+                      _mapController.camera.zoom - 1),
                   child: const Icon(Icons.remove),
                 ),
                 const SizedBox(height: 8),

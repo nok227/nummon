@@ -208,10 +208,23 @@ class _MapPickerPageState extends State<MapPickerPage> {
                 markers: [
                   Marker(
                     point: _selectedLocation,
-                    width: 40,
-                    height: 40,
-                    child: const Icon(Icons.location_pin,
-                        color: Colors.red, size: 40),
+                    width: 44,
+                    height: 44,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const Icon(Icons.location_pin,
+                            color: Colors.red, size: 40),
+                      ],
+                    ),
                   ),
                 ],
               ),

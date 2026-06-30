@@ -82,7 +82,7 @@ class _StoryPreviewPageState extends State<StoryPreviewPage> {
                   ? (_isInitialized
                       ? AspectRatio(
                           aspectRatio: _videoController!.value.aspectRatio,
-                          // child: VideoPlayer(_videoController!),
+                          child: VideoPlayer(_videoController!),
                         )
                       : const CircularProgressIndicator(color: Colors.white))
                   : Image.file(File(widget.file.path), fit: BoxFit.contain),
