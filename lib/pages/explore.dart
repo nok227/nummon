@@ -1488,15 +1488,11 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
                                     child: Text(
                                       '$count',
                                       style: const TextStyle(
                                           fontSize: 11,
-                                          color: Colors.white,
+                                          color: Colors.blue,
                                           fontWeight: FontWeight.bold),
                                     ),
                                   );

@@ -105,6 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'isRead': false,
         'isDeleted': false,
         'isEdited': false,
+        'isStoryReply': false, // ✅ เพิ่มค่าเริ่มต้น
       });
 
       await FirebaseFirestore.instance
@@ -156,7 +157,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // ─── ລົບຂໍ້ຄວາມ (ສຳລັບເຮົາເອງເທົ່ານັ້ນ) ───
+  // ─── ລົບຂໍ້ຄວາມ ───
   Future<void> _deleteMessage(String messageId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -179,7 +180,6 @@ class _ChatScreenState extends State<ChatScreen> {
     if (confirm != true) return;
 
     try {
-      // ✅ ตรวจสอบว่าข้อความที่กำลังลบเป็นข้อความล่าสุดหรือไม่
       final chatDoc = await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -193,12 +193,10 @@ class _ChatScreenState extends State<ChatScreen> {
             .collection('messages')
             .doc(messageId)
             .get();
-        
+
         final messageData = messageDoc.data() as Map<String, dynamic>;
-        
-        // ถ้าข้อความที่ลบเป็นข้อความล่าสุด ให้อัปเดต lastMessage
+
         if (data['lastMessage'] == messageData['content']) {
-          // หาข้อความล่าสุดที่ยังไม่ถูกลบ
           final lastMsgSnapshot = await FirebaseFirestore.instance
               .collection('chats')
               .doc(widget.chatId)
@@ -219,7 +217,6 @@ class _ChatScreenState extends State<ChatScreen> {
               'updatedAt': FieldValue.serverTimestamp(),
             });
           } else {
-            // ไม่มีข้อความเหลือเลย
             await FirebaseFirestore.instance
                 .collection('chats')
                 .doc(widget.chatId)
@@ -232,7 +229,6 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      // ✅ ลบข้อความ
       await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -264,7 +260,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // ─── ແກ້ໄຂຂໍ້ຄວາມ (ສຳລັບເຮົາເອງເທົ່ານັ້ນ) ───
+  // ─── ແກ້ໄຂຂໍ້ຄວາມ ───
   void _showEditDialog(String messageId, String currentContent) {
     _editController.text = currentContent;
 
@@ -367,7 +363,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _saveEditedMessage(String messageId, String newContent) async {
     try {
-      // ✅ อัปเดตข้อความ
       await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -378,7 +373,6 @@ class _ChatScreenState extends State<ChatScreen> {
         'isEdited': true,
       });
 
-      // ✅ อัปเดต lastMessage ทันที (Real-time)
       final chatDoc = await FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
@@ -386,8 +380,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (chatDoc.exists) {
         final data = chatDoc.data() as Map<String, dynamic>;
-        
-        // ตรวจสอบว่าข้อความที่แก้ไขเป็นข้อความล่าสุดหรือไม่
+
         if (data['lastMessage'] == _editController.text) {
           await FirebaseFirestore.instance
               .collection('chats')
@@ -423,7 +416,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ─── ແສດງເມນູເມື່ອກົດຄ້າງຂໍ້ຄວາມ ───
   void _showMessageMenu(BuildContext context, String messageId, String content,
-      bool isMe, bool isSticker) {
+      bool isMe, bool isSticker, bool isStoryReply) {
+    // ✅ ถ้าเป็นข้อความตอบสตอรี่ ไม่ให้แก้ไข/ลบได้
+    if (isStoryReply) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ນີ້ແມ່ນຂໍ້ຄວາມຕອບສະຕໍຣີ່ ບໍ່ສາມາດແກ້ໄຂ ຫຼື ລົບໄດ້'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     if (!isMe || isSticker) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -486,6 +491,189 @@ class _ChatScreenState extends State<ChatScreen> {
         builder: (context) => ProfilePage(
           targetUserId: widget.otherUserId,
         ),
+      ),
+    );
+  }
+
+  // ✅ Widget แสดงข้อความตอบสตอรี่
+  Widget _buildStoryReplyMessage({
+    required String content,
+    required bool isMe,
+    required String storyImage,
+    required String storyMediaType,
+    required DateTime? timestamp,
+    required bool isEdited,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isMe) ...[
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.8,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ✅ รูปย่อสตอรี่
+                  Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          storyImage,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.grey[300],
+                            child: Icon(
+                              storyMediaType == 'video'
+                                  ? Icons.videocam
+                                  : Icons.image,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '📸 ຕອບສະຕໍຣີ່',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              content,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (isEdited) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'ແກ້ໄຂແລ້ວ',
+                      style: TextStyle(fontSize: 9, color: Colors.grey[500]),
+                    ),
+                  ],
+                  if (timestamp != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('HH:mm').format(timestamp),
+                      style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+          ] else ...[
+            const SizedBox(width: 4),
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.8,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.teal,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              '📸 ຕອບສະຕໍຣີ່',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              content,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          storyImage,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.teal[400],
+                            child: Icon(
+                              storyMediaType == 'video'
+                                  ? Icons.videocam
+                                  : Icons.image,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (isEdited) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'ແກ້ໄຂແລ້ວ',
+                      style: TextStyle(
+                          fontSize: 9, color: Colors.white.withOpacity(0.6)),
+                    ),
+                  ],
+                  if (timestamp != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('HH:mm').format(timestamp),
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.white.withOpacity(0.8)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -607,14 +795,29 @@ class _ChatScreenState extends State<ChatScreen> {
                     final isMe = data['senderId'] == currentUser?.uid;
                     final isSticker = data['isSticker'] ?? false;
                     final isEdited = data['isEdited'] ?? false;
+                    final isStoryReply = data['isStoryReply'] ?? false;
                     final content = data['content'] ?? '';
                     final timestamp =
                         (data['timestamp'] as Timestamp?)?.toDate();
 
+                    // ✅ ถ้าเป็นข้อความตอบสตอรี่
+                    if (isStoryReply) {
+                      final storyImage = data['storyImage'] ?? '';
+                      final storyMediaType = data['storyMediaType'] ?? 'image';
+                      return _buildStoryReplyMessage(
+                        content: content,
+                        isMe: isMe,
+                        storyImage: storyImage,
+                        storyMediaType: storyMediaType,
+                        timestamp: timestamp,
+                        isEdited: isEdited,
+                      );
+                    }
+
                     return GestureDetector(
                       onLongPress: () {
                         _showMessageMenu(
-                            context, messageId, content, isMe, isSticker);
+                            context, messageId, content, isMe, isSticker, isStoryReply);
                       },
                       child: _buildMessageBubble(
                         messageId: messageId,

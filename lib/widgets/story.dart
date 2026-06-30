@@ -12,11 +12,10 @@ import 'package:video_compress/video_compress.dart';
 import '../models/api_Cloudinary.dart';
 import 'story_preview_page.dart';
 import '../private/profile_page.dart';
-// ✅ เพิ่ม import สำหรับแชท
 import '../chats/chat_screen.dart';
 
 // ---------------------------------------------------------
-// ฟังก์ชันสกัดภาพกึ่งกลางเพื่อใช้เป็นภาพหน้าปก (เวอร์ชันปรับปรุงสมบูรณ์)
+// ฟังก์ชันสกัดภาพกึ่งกลางเพื่อใช้เป็นภาพหน้าปก
 // ---------------------------------------------------------
 String getMiddleFrameThumbnail(String url) {
   if (url.isEmpty) return url;
@@ -680,7 +679,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
   bool _isVideoPlaying = false;
   bool _isDisposed = false;
 
-  // ✅ ตัวแปรสำหรับส่งข้อความ
   final TextEditingController _messageController = TextEditingController();
   bool _showChatInput = false;
 
@@ -712,7 +710,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     setState(() {
       _progress = 0.0;
       _isVideoPlaying = false;
-      _showChatInput = false; // ✅ ปิดช่องแชทเมื่อเปลี่ยนเรื่อง
+      _showChatInput = false;
     });
     final story = widget.storyGroups[currentGroupIdx].stories[currentStoryIdx];
     final isVideo = story['mediaType'] == 'video';
@@ -935,8 +933,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
 
     final group = widget.storyGroups[currentGroupIdx];
     final targetUserId = group.userId;
-    
-    // ถ้าเป็นสตอรี่ของตัวเอง ไม่ต้องเปิดแชท
+
     if (targetUserId == currentUser.uid) {
       _showSnackBar("ນີ້ແມ່ນສະຕໍຣີ່ຂອງທ່ານເອງ");
       return;
@@ -995,7 +992,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     }
   }
 
-  // ✅ ฟังก์ชันส่งข้อความผ่าน Story
+  // ✅ ฟังก์ชันส่งข้อความจาก Story (แบบมีรายละเอียด)
   Future<void> _sendMessageViaStory() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
@@ -1007,7 +1004,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     final targetUserId = group.userId;
     final story = group.stories[currentStoryIdx];
 
-    // ถ้าเป็นสตอรี่ของตัวเอง
     if (targetUserId == currentUser.uid) {
       _showSnackBar("ທ່ານບໍ່ສາມາດສົ່ງຂໍ້ຄວາມຫາຕົນເອງ");
       return;
@@ -1019,6 +1015,32 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
     userIds.sort();
     final chatId = '${userIds[0]}_${userIds[1]}';
 
+    // ✅ สร้างข้อความที่จะส่ง (มีข้อมูลสตอรี่)
+    final storyImage = story['storyImage'] ?? '';
+    final isVideo = story['mediaType'] == 'video';
+    final storyId = story['storyDocId'] ?? '';
+    
+    // ✅ สร้างข้อความแบบมีข้อมูลสตอรี่ (เหมือน WhatsApp)
+    final Map<String, dynamic> messageData = {
+      'senderId': currentUser.uid,
+      'senderName': currentUser.displayName ?? 'User',
+      'senderPhotoUrl': currentUser.photoURL ?? '',
+      'receiverId': targetUserId,
+      'content': text,
+      'isSticker': false,
+      'timestamp': FieldValue.serverTimestamp(),
+      'isRead': false,
+      'isDeleted': false,
+      'isEdited': false,
+      // ✅ ข้อมูลสตอรี่
+      'isStoryReply': true,
+      'storyId': storyId,
+      'storyImage': storyImage,
+      'storyMediaType': isVideo ? 'video' : 'image',
+      'storyOwnerId': targetUserId,
+      'storyOwnerName': group.userName,
+    };
+
     try {
       // สร้างหรืออัปเดตแชท
       final doc = await FirebaseFirestore.instance
@@ -1026,12 +1048,16 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
           .doc(chatId)
           .get();
 
+      // ✅ ข้อความแสดงในแชท (มีไอคอนสตอรี่)
+      final displayMessage = 'ຕອບສະຕໍຣີ່: $text';
+
       if (!doc.exists) {
         await FirebaseFirestore.instance.collection('chats').doc(chatId).set({
           'participants': userIds,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-          'lastMessage': text,
+          'lastMessage': displayMessage,
+          'lastMessageTime': FieldValue.serverTimestamp(),
           'senderId': currentUser.uid,
           'receiverId': targetUserId,
           'senderName': currentUser.displayName ?? 'User',
@@ -1042,9 +1068,14 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
             userIds[0]: 0,
             userIds[1]: 1,
           },
+          // ✅ เก็บข้อมูลสตอรี่ล่าสุด
+          'lastStoryReply': {
+            'storyId': storyId,
+            'storyImage': storyImage,
+            'storyMediaType': isVideo ? 'video' : 'image',
+          },
         });
       } else {
-        // อัปเดต unreadCount
         final docData = doc.data() as Map<String, dynamic>;
         Map<String, dynamic> unreadCounts =
             Map<String, dynamic>.from(docData['unreadCounts'] ?? {});
@@ -1054,7 +1085,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
             .collection('chats')
             .doc(chatId)
             .update({
-          'lastMessage': text,
+          'lastMessage': displayMessage,
           'lastMessageTime': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
           'senderId': currentUser.uid,
@@ -1064,33 +1095,28 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
           'senderPhotoUrl': currentUser.photoURL ?? '',
           'receiverPhotoUrl': group.userAvatar,
           'unreadCounts': unreadCounts,
+          // ✅ อัปเดตข้อมูลสตอรี่ล่าสุด
+          'lastStoryReply': {
+            'storyId': storyId,
+            'storyImage': storyImage,
+            'storyMediaType': isVideo ? 'video' : 'image',
+          },
         });
       }
 
-      // ส่งข้อความ
+      // ✅ ส่งข้อความพร้อมข้อมูลสตอรี่
       await FirebaseFirestore.instance
           .collection('chats')
           .doc(chatId)
           .collection('messages')
-          .add({
-        'senderId': currentUser.uid,
-        'senderName': currentUser.displayName ?? 'User',
-        'senderPhotoUrl': currentUser.photoURL ?? '',
-        'receiverId': targetUserId,
-        'content': text,
-        'isSticker': false,
-        'timestamp': FieldValue.serverTimestamp(),
-        'isRead': false,
-        'isDeleted': false,
-        'isEdited': false,
-      });
+          .add(messageData);
 
       _messageController.clear();
       setState(() {
         _showChatInput = false;
       });
 
-      _showSnackBar("ສົ່ງຂໍ້ຄວາມສຳເລັດ ✅");
+      _showSnackBar("ສົ່ງຂໍ້ຄວາມຕອບສະຕໍຣີ່ສຳເລັດ ✅");
       _resumeStory();
     } catch (e) {
       debugPrint('Send message via story error: $e');
@@ -1260,7 +1286,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
       body: GestureDetector(
         onTapDown: (_) => _pauseStory(),
         onTapUp: (details) {
-          // ✅ ถ้าแสดงช่องแชทอยู่ ให้ซ่อนก่อน
           if (_showChatInput) {
             setState(() {
               _showChatInput = false;
@@ -1399,7 +1424,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                       ),
                       Row(
                         children: [
-                          // ✅ ปุ่มแชท (แสดงเฉพาะไม่ใช่สตอรี่ของตัวเอง)
                           if (!isMyStory)
                             IconButton(
                               icon: const Icon(Icons.chat_bubble_outline,
@@ -1451,7 +1475,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
               right: 16,
               child: Column(
                 children: [
-                  // ✅ แสดงปุ่มต่างๆ ด้านล่าง
                   if (isMyStory)
                     Center(
                       child: StreamBuilder<QuerySnapshot>(
@@ -1490,7 +1513,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                   else
                     Column(
                       children: [
-                        // ✅ ปุ่มเปิดช่องแชท (ข้อความ)
                         if (!_showChatInput)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
@@ -1518,7 +1540,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                                   children: [
                                     Icon(Icons.message, color: Colors.white60),
                                     SizedBox(width: 8),
-                                    Text("ຕອບກັບ",
+                                    Text("ຕອບສະຕໍຣີ່",
                                         style: TextStyle(
                                             color: Colors.white60,
                                             fontSize: 14)),
@@ -1527,7 +1549,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                               ),
                             ),
                           ),
-                        // ✅ ช่องพิมพ์ข้อความ
                         if (_showChatInput)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1539,12 +1560,30 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                             ),
                             child: Row(
                               children: [
+                                // ✅ แสดงรูปย่อสตอรี่
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    story['storyImage'] ?? '',
+                                    width: 36,
+                                    height: 36,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (c, e, s) => Container(
+                                      width: 36,
+                                      height: 36,
+                                      color: Colors.grey[800],
+                                      child: const Icon(Icons.image,
+                                          color: Colors.white54, size: 20),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
                                     controller: _messageController,
                                     style: const TextStyle(color: Colors.white),
                                     decoration: const InputDecoration(
-                                      hintText: "ພິມຂໍ້ຄວາມ...",
+                                      hintText: "ຕອບສະຕໍຣີ່...",
                                       hintStyle:
                                           TextStyle(color: Colors.white38),
                                       border: InputBorder.none,
@@ -1575,7 +1614,6 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                               ],
                             ),
                           ),
-                        // ✅ แถวอิโมจิ (ซ่อนเมื่อเปิดช่องแชท)
                         if (!_showChatInput)
                           Container(
                             padding: const EdgeInsets.symmetric(
