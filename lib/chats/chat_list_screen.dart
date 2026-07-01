@@ -26,8 +26,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ລົບແຊດ'),
-        content: Text('ທ່ານຕ້ອງການລົບແຊດກັບ "$receiverName" ແທ້ຫຼືບໍ່?'),
+        title: const Text('ລົບແຊັດ'),
+        content: Text('ທ່ານຕ້ອງການລົບແຊັດກັບ "$receiverName" ແທ້ຫຼືບໍ່?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -66,7 +66,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('ລົບແຊດສຳເລັດແລ້ວ'),
+            content: Text('ລົບແຊັດສຳເລັດແລ້ວ'),
             backgroundColor: Colors.green,
           ),
         );
@@ -124,7 +124,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'ແຊດ',
+          'ແຊັດ',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.teal,
@@ -179,12 +179,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Icon(Icons.chat_bubble_outline, size: 60, color: Colors.grey),
                   SizedBox(height: 16),
                   Text(
-                    'ຍັງບໍ່ມີແຊດ',
+                    'ຍັງບໍ່ມີແຊັດ',
                     style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'ເລີ່ມແຊດກັບເພື່ອນໆໄດ້ເລີຍ!',
+                    'ເລີ່ມແຊັດກັບເພື່ອນໆໄດ້ເລີຍ!',
                     style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
                 ],
@@ -304,7 +304,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         ),
                       ),
                       subtitle: Text(
-                        lastMessage.isNotEmpty ? lastMessage : 'ເລີ່ມແຊດກັນເລີຍ!',
+                        lastMessage.isNotEmpty ? lastMessage : 'ເລີ່ມແຊັດກັນເລີຍ!',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

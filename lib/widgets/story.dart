@@ -48,6 +48,27 @@ String getMiddleFrameThumbnail(String url) {
 }
 
 // ---------------------------------------------------------
+// ฟังก์ชันแปลง Timestamp เป็นข้อความ "โพสต์เมื่อ..."
+// ---------------------------------------------------------
+String formatStoryTimeAgo(Timestamp? createdAt) {
+  if (createdAt == null) return '';
+
+  final now = DateTime.now();
+  final postedTime = createdAt.toDate();
+  final diff = now.difference(postedTime);
+
+  if (diff.inSeconds < 60) {
+    return 'ຫາກໍ່ໂພສ';
+  } else if (diff.inMinutes < 60) {
+    return '${diff.inMinutes} ນາທີກ່ອນ';
+  } else if (diff.inHours < 24) {
+    return '${diff.inHours} ຊົ່ວໂມງກ່ອນ';
+  } else {
+    return '${diff.inDays} ມື້ກ່ອນ';
+  }
+}
+
+// ---------------------------------------------------------
 // ฟังก์ชันลบไฟล์ออกจาก Cloudinary
 // ---------------------------------------------------------
 Future<void> deleteFromCloudinary(String url, bool isVideo) async {
@@ -1414,11 +1435,26 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
                                       as ImageProvider,
                             ),
                             const SizedBox(width: 10),
-                            Text(isMyStory ? "ສະຕໍຣີ່ຂອງທ່ານ" : group.userName,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15)),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                    isMyStory
+                                        ? "ສະຕໍຣີ່ຂອງທ່ານ"
+                                        : group.userName,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15)),
+                                Text(
+                                    formatStoryTimeAgo(
+                                        story['createdAt'] as Timestamp?),
+                                    style: TextStyle(
+                                        color: Colors.white.withOpacity(0.7),
+                                        fontSize: 12)),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -1470,7 +1506,7 @@ class _FacebookStoryViewerState extends State<FacebookStoryViewer> {
               ),
             ),
             Positioned(
-              bottom: 40,
+              bottom: 10,
               left: 16,
               right: 16,
               child: Column(

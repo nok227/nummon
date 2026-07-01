@@ -47,6 +47,10 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
   // ── Stream ──
   late final Stream<DocumentSnapshot> _placeStream;
 
+  // ── Admin Check ──
+  bool _isAdmin = false;
+  bool _isLoadingAdmin = true; // ✅ เพิ่มตัวแปรเช็คสถานะโหลด
+
   // Reaction Emojis
   static const List<Map<String, dynamic>> _reactions = [
     {'emoji': '👍', 'label': 'ຊອບ'},
@@ -65,6 +69,7 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
         .doc(widget.placeId)
         .snapshots();
     _loadReactions();
+    _checkAdminStatus();
   }
 
   @override
@@ -73,6 +78,23 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
     _commentController.dispose();
     _commentFocusNode.dispose();
     super.dispose();
+  }
+
+  // ── Check Admin Status ──
+  Future<void> _checkAdminStatus() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      final email = currentUser.email ?? '';
+      setState(() {
+        _isAdmin = email == 'admin_app@travel.com' || email == 'admin_app';
+        _isLoadingAdmin = false;
+      });
+    } else {
+      setState(() {
+        _isAdmin = false;
+        _isLoadingAdmin = false;
+      });
+    }
   }
 
   // ── Load Reactions from Firebase ──
@@ -774,25 +796,28 @@ class _PlaceDetailPageState extends State<PlaceDetailPage> {
             title: Text(place.name),
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
+            // ── แสดงปุ่มแก้ไขเฉพาะ Admin เท่านั้น ──
             actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
-                onSelected: (value) {
-                  if (value == 'edit') _openEditPage(place);
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit, color: Colors.teal, size: 20),
-                        SizedBox(width: 10),
-                        Text('ແກ້ໄຂຂໍ້ມູນ'),
-                      ],
+              // ✅ ตรวจสอบให้แน่ใจว่า _isAdmin เป็น true และโหลดเสร็จแล้ว
+              if (_isAdmin && !_isLoadingAdmin)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  onSelected: (value) {
+                    if (value == 'edit') _openEditPage(place);
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, color: Colors.teal, size: 20),
+                          SizedBox(width: 10),
+                          Text('ແກ້ໄຂຂໍ້ມູນ'),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
           body: SingleChildScrollView(

@@ -13,20 +13,19 @@ import '../ci/comment_service.dart';
 import '../models/comment_model.dart';
 import '../ci/reaction_picker.dart';
 import '../models/emoji_storage.dart';
-import '../models/place_model.dart'; // ✅ เพิ่ม import Place
+import '../models/place_model.dart';
 
-// ─── import ปุ่มแชทและหน้าแชท ───
 import '../chats/inquiry_button.dart';
 import '../chats/chat_list_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? targetUserId;
-  final Function(Place)? onAddToPlan; // ✅ เปลี่ยนเป็น optional
+  final Function(Place)? onAddToPlan;
 
   const ProfilePage({
     super.key, 
     this.targetUserId,
-    this.onAddToPlan, // ✅ optional
+    this.onAddToPlan,
   });
 
   @override
@@ -45,9 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? targetId;
   bool isMe = true;
 
-  // ✅ ฟังก์ชัน default สำหรับ onAddToPlan
   void _defaultOnAddToPlan(Place place) {
-    // ทำอะไรก็ได้หรือไม่ต้องทำก็ได้
     debugPrint('Add to plan: ${place.name}');
   }
 
@@ -88,6 +85,134 @@ class _ProfilePageState extends State<ProfilePage> {
     _userSubscription?.cancel();
     _editContentController.dispose();
     super.dispose();
+  }
+
+  // ─── Widget สำหรับไอคอนแชทพร้อม Badge ───
+  Widget _buildChatIconWithBadge() {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const Icon(Icons.chat_bubble_outline, color: Colors.white);
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chats')
+          .where('participants', arrayContains: currentUser.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        int totalUnread = 0;
+        
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final unreadCounts = Map<String, dynamic>.from(data['unreadCounts'] ?? {});
+            final userUnread = unreadCounts[currentUser.uid] as int? ?? 0;
+            totalUnread += userUnread;
+          }
+        }
+
+        return Stack(
+          children: [
+            const Icon(Icons.chat_bubble_outline, color: Colors.white),
+            if (totalUnread > 0)
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Text(
+                    totalUnread > 99 ? '99+' : '$totalUnread',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ─── Widget สำหรับปุ่ม Inquiry พร้อม Badge ───
+  Widget _buildInquiryButtonWithBadge(String targetId, String displayName, String photoUrl) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return InquiryButton(
+        targetUserId: targetId,
+        targetName: displayName,
+        targetPhotoUrl: photoUrl,
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chats')
+          .where('participants', arrayContains: currentUser.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        int unreadWithThisUser = 0;
+        
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final participants = List<String>.from(data['participants'] ?? []);
+            if (participants.contains(targetId) && participants.contains(currentUser.uid)) {
+              final unreadCounts = Map<String, dynamic>.from(data['unreadCounts'] ?? {});
+              unreadWithThisUser = (unreadCounts[currentUser.uid] ?? 0).toInt();
+              break;
+            }
+          }
+        }
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            InquiryButton(
+              targetUserId: targetId,
+              targetName: displayName,
+              targetPhotoUrl: photoUrl,
+            ),
+            if (unreadWithThisUser > 0)
+              Positioned(
+                right: -4,
+                top: -8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 20,
+                    minHeight: 20,
+                  ),
+                  child: Text(
+                    unreadWithThisUser > 99 ? '99+' : '$unreadWithThisUser',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 
   void _showImagePreview(String imageUrl, {String? title}) {
@@ -319,7 +444,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final displayName = userData!['displayName'] ?? 'User';
     final bio = userData!['bio'] ?? '';
     
-    // ✅ ใช้ onAddToPlan หรือ default
     final onAddToPlan = widget.onAddToPlan ?? _defaultOnAddToPlan;
 
     return Scaffold(
@@ -329,9 +453,9 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
-          if (!isMe)
+          if (!isMe && targetId != null)
             IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
+              icon: _buildChatIconWithBadge(),
               onPressed: () {
                 final inquiryBtn = InquiryButton(
                   targetUserId: targetId!,
@@ -344,7 +468,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           if (isMe)
             IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
+              icon: _buildChatIconWithBadge(),
               onPressed: () {
                 Navigator.push(
                   context,
@@ -363,7 +487,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 );
               } else if (value == 'logout' && isMe) {
                 _logout();
-              } else if (value == 'chat' && !isMe) {
+              } else if (value == 'chat' && !isMe && targetId != null) {
                 final inquiryBtn = InquiryButton(
                   targetUserId: targetId!,
                   targetName: displayName,
@@ -477,19 +601,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   if (bio.isNotEmpty) Padding(padding: const EdgeInsets.all(8), child: Text(bio, style: const TextStyle(color: Colors.grey))),
                   const SizedBox(height: 12),
 
-                  // ─── ปุ่มแชท (InquiryButton) ───
+                  // ─── ปุ่มแชทพร้อม Badge ───
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (!isMe) ...[
+                        if (!isMe && targetId != null) ...[
                           Expanded(
-                            child: InquiryButton(
-                              targetUserId: targetId!,
-                              targetName: displayName,
-                              targetPhotoUrl: photoUrl,
-                            ),
+                            child: _buildInquiryButtonWithBadge(targetId!, displayName, photoUrl),
                           ),
                         ],
                       ],
@@ -775,12 +895,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       final postId = posts[index].id;
                       data['id'] = postId;
                       
-                      // ✅ ส่ง onAddToPlan ให้ _UserPostCard
                       return _UserPostCard(
                         key: ValueKey(postId),
                         postData: data,
                         postId: postId,
-                        onAddToPlan: onAddToPlan, // ✅ ส่งไป
+                        onAddToPlan: onAddToPlan,
                       );
                     },
                   );
@@ -794,11 +913,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 }
 
-// ─── User Post Card (เหมือนใน explore.dart) ───
+// ─── User Post Card ───
 class _UserPostCard extends StatefulWidget {
   final Map<String, dynamic> postData;
   final String postId;
-  final Function(Place) onAddToPlan; // ✅ เปลี่ยนเป็น required
+  final Function(Place) onAddToPlan;
 
   const _UserPostCard({
     super.key,

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../private/profile_page.dart';
+import '../services/onesignal_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -141,6 +142,17 @@ class _ChatScreenState extends State<ChatScreen> {
             .update({'unreadCounts': unreadCounts});
       }
 
+      // ✅ ແຈ້ງເຕືອນເຂົ້າມືຖືຜູ້ຮັບ ຖ້າລາວປິດແອັບ/ບໍ່ໄດ້ຢູ່ໜ້າແຊດ
+      OneSignalService().sendChatNotification(
+        receiverExternalId: widget.otherUserId,
+        title: currentUser.displayName ?? 'ຂໍ້ຄວາມໃໝ່',
+        body: isSticker ? 'ສົ່ງສະຕິກເກີ' : content,
+        data: {
+          'type': 'chat_message',
+          'chatId': widget.chatId,
+        },
+      );
+
       _messageController.clear();
       setState(() => _showStickerPicker = false);
       _scrollToBottom();
@@ -197,17 +209,25 @@ class _ChatScreenState extends State<ChatScreen> {
         final messageData = messageDoc.data() as Map<String, dynamic>;
 
         if (data['lastMessage'] == messageData['content']) {
-          final lastMsgSnapshot = await FirebaseFirestore.instance
+          // ✅ ไม่ใช้ .where('isDeleted', ...) ร่วมกับ .orderBy('timestamp', ...)
+          // เพราะ Firestore ต้องการ composite index สำหรับคู่นี้โดยเฉพาะ
+          // (ถ้ายังไม่ได้สร้าง index จะเจอ error FAILED_PRECONDITION ทันที)
+          // แก้โดยดึงมาตามลำดับเวลาอย่างเดียว แล้วมากรอง isDeleted ในแอปแทน
+          final recentSnapshot = await FirebaseFirestore.instance
               .collection('chats')
               .doc(widget.chatId)
               .collection('messages')
-              .where('isDeleted', isEqualTo: false)
               .orderBy('timestamp', descending: true)
-              .limit(1)
+              .limit(20)
               .get();
 
-          if (lastMsgSnapshot.docs.isNotEmpty) {
-            final lastMsgData = lastMsgSnapshot.docs.first.data();
+          final activeDocs = recentSnapshot.docs
+              .where((doc) =>
+                  doc.id != messageId && (doc.data()['isDeleted'] != true))
+              .toList();
+
+          if (activeDocs.isNotEmpty) {
+            final lastMsgData = activeDocs.first.data();
             await FirebaseFirestore.instance
                 .collection('chats')
                 .doc(widget.chatId)
@@ -429,7 +449,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    if (!isMe || isSticker) {
+    if (!isMe) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('ສາມາດແກ້ໄຂ ຫຼື ລົບໄດ້ສະເພາະຂໍ້ຄວາມຂອງທ່ານເທົ່ານັ້ນ'),
@@ -449,14 +469,17 @@ class _ChatScreenState extends State<ChatScreen> {
         return SafeArea(
           child: Wrap(
             children: [
-              ListTile(
-                leading: const Icon(Icons.edit, color: Colors.blue),
-                title: const Text('ແກ້ໄຂ'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showEditDialog(messageId, content);
-                },
-              ),
+              // ✅ ສະຕິກເກີ/ອີໂມຈິ ບໍ່ມີຂໍ້ຄວາມໃຫ້ແກ້ໄຂ ຈຶ່ງເອົາ "ແກ້ໄຂ" ອອກ
+              // ແຕ່ "ລົບ" ຍັງໃຫ້ໃຊ້ໄດ້ຄືເດີມ
+              if (!isSticker)
+                ListTile(
+                  leading: const Icon(Icons.edit, color: Colors.blue),
+                  title: const Text('ແກ້ໄຂ'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showEditDialog(messageId, content);
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text('ລົບ', style: TextStyle(color: Colors.red)),
@@ -476,7 +499,7 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0.0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -725,7 +748,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   .collection('chats')
                   .doc(widget.chatId)
                   .collection('messages')
-                  .orderBy('timestamp', descending: false)
+                  .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -780,10 +803,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 }
 
-                WidgetsBinding.instance
-                    .addPostFrameCallback((_) => _scrollToBottom());
-
                 return ListView.builder(
+                  reverse: true,
                   controller: _scrollController,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -916,9 +937,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             controller: _messageController,
                             maxLines: null,
                             keyboardType: TextInputType.multiline,
-                            onChanged: (value) {
-                              setState(() {});
-                            },
                             decoration: InputDecoration(
                               hintText: 'ພິມຂໍ້ຄວາມ...',
                               hintStyle: TextStyle(color: Colors.grey[400]),
@@ -935,19 +953,24 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.send,
-                          color: _messageController.text.trim().isEmpty
-                              ? Colors.grey
-                              : Colors.green,
-                          size: 28,
-                        ),
-                        onPressed: () {
-                          final text = _messageController.text.trim();
-                          if (text.isNotEmpty) {
-                            _sendMessage(text: text);
-                          }
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _messageController,
+                        builder: (context, value, child) {
+                          return IconButton(
+                            icon: Icon(
+                              Icons.send,
+                              color: value.text.trim().isEmpty
+                                  ? Colors.grey
+                                  : Colors.green,
+                              size: 28,
+                            ),
+                            onPressed: () {
+                              final text = _messageController.text.trim();
+                              if (text.isNotEmpty) {
+                                _sendMessage(text: text);
+                              }
+                            },
+                          );
                         },
                       ),
                     ],

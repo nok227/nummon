@@ -15,12 +15,14 @@ import 'tourist_attractions.dart';
 import '../routes/map.dart';
 import '../admin/admin_add_place.dart';
 import '../private/profile_page.dart';
+import '../services/onesignal_service.dart';
 
 // ─── import หน้าแชท ───
 import '../chats/chat_list_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final User? user; // ✅ เพิ่มบรรทัดนี้
+  const MainScreen({super.key, this.user});
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
@@ -38,6 +40,12 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.user != null) {
+      OneSignalService().login(widget.user!.uid);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) OneSignalService().setupPushSubscriptionObserver(context);
+    });
     if (currentUser != null &&
         (currentUser!.email == 'admin_app@travel.com' ||
             currentUser!.email == 'admin_app')) {
@@ -150,7 +158,7 @@ class _MainScreenState extends State<MainScreen> {
           TextButton(
               onPressed: () => Navigator.pop(context),
               child:
-                  const Text('ຍົກເລີກ', style: TextStyle(color: Colors.grey))),
+                  const Text('ຍົກເລີກ', style: TextStyle(color: Colors.black87))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal, foregroundColor: Colors.white),
@@ -390,7 +398,7 @@ class _MainScreenState extends State<MainScreen> {
                                   padding: EdgeInsets.all(8.0),
                                   child: Text("ບໍ່ມີແຜນການ",
                                       style: TextStyle(
-                                          color: Colors.grey, fontSize: 12))),
+                                          color: Colors.black87, fontSize: 12))),
                             ...planning.map((doc) =>
                                 _buildPlanCard(doc, isCompletedType: false)),
                             const SizedBox(height: 20),
@@ -405,7 +413,7 @@ class _MainScreenState extends State<MainScreen> {
                                   padding: EdgeInsets.all(8.0),
                                   child: Text("ບໍ່ມີປະຫວັດການທ່ຽວ",
                                       style: TextStyle(
-                                          color: Colors.grey, fontSize: 12))),
+                                          color: Colors.black87, fontSize: 12))),
                             ...completed.map((doc) =>
                                 _buildPlanCard(doc, isCompletedType: true)),
                           ],
@@ -444,54 +452,72 @@ class _MainScreenState extends State<MainScreen> {
                 _totalUnreadCount = totalUnread;
               }
 
-              return NavigationBar(
-                selectedIndex: _currentIndex,
-                onDestinationSelected: (index) =>
-                    setState(() => _currentIndex = index),
-                destinations: [
-                  const NavigationDestination(
-                      icon: Icon(Icons.home), label: "Home"),
-                  if (isAdmin)
+              return NavigationBarTheme(
+                data: NavigationBarThemeData(
+                  labelTextStyle: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.selected)) {
+                      return const TextStyle(
+                          color: Colors.green, fontWeight: FontWeight.bold);
+                    }
+                    return const TextStyle(color: Colors.black87);
+                  }),
+                  iconTheme: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.selected)) {
+                      return const IconThemeData(color: Colors.green);
+                    }
+                    return const IconThemeData(color: Colors.black87);
+                  }),
+                ),
+                child: NavigationBar(
+                  selectedIndex: _currentIndex,
+                  onDestinationSelected: (index) =>
+                      setState(() => _currentIndex = index),
+                  indicatorColor: Colors.transparent, // ✅ เพิ่มบรรทัดนี้
+                  overlayColor: MaterialStateProperty.all(
+                      Colors.transparent), // ✅ เพิ่มบรรทัดนี้
+                  destinations: [
                     const NavigationDestination(
-                        icon: Icon(Icons.add_box, color: Colors.teal),
-                        label: "Add"),
-                  const NavigationDestination(
-                      icon: Icon(Icons.explore), label: "Explore"),
-                  const NavigationDestination(
-                      icon: Icon(Icons.place), label: "Tourist"),
-                  // ใช้ Stack + Positioned แทน Badge
-                  NavigationDestination(
-                    icon: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(Icons.chat_bubble_outline),
-                        if (totalUnread > 0)
-                          Positioned(
-                            right: -8,
-                            top: -8,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '$totalUnread',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                        icon: Icon(Icons.home), label: "ໜ້າຫຼັກ"),
+                    if (isAdmin)
+                      const NavigationDestination(
+                          icon: Icon(Icons.add_box), label: "ເພີ່ມ"),
+                    const NavigationDestination(
+                        icon: Icon(Icons.travel_explore), label: "ຜູ້ຄົນ"),
+                    const NavigationDestination(
+                        icon: Icon(Icons.place), label: "ເມືອງທ່ຽວ"),
+                    NavigationDestination(
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.chat_bubble_outline),
+                          if (totalUnread > 0)
+                            Positioned(
+                              right: -8,
+                              top: -8,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Text(
+                                  '$totalUnread',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
+                      label: "ແຊັດ",
                     ),
-                    label: "ແຊດ",
-                  ),
-                  const NavigationDestination(
-                      icon: Icon(Icons.map), label: "Map"),
-                ],
+                    const NavigationDestination(
+                        icon: Icon(Icons.map), label: "ແຜນທີ່"),
+                  ],
+                ),
               );
             },
           ),
