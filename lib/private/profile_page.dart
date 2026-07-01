@@ -1800,6 +1800,45 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
     return (lat, lng);
   }
 
+  Future<void> _confirmDeletePost(BuildContext context) async {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("ລົບໂພສຕ໌?"),
+        content: const Text("ທ່ານຕ້ອງການລົບໂພສຕ໌ນີ້ແທ້ຫຼືບໍ່? ການລົບຈະບໍ່ສາມາດກູ້ຄືນໄດ້"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("ຍົກເລີກ"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await FirebaseFirestore.instance
+                    .collection('user_posts')
+                    .doc(widget.postId)
+                    .delete();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("ລົບໂພສຕ໌ແລ້ວ"), backgroundColor: Colors.red),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("ເກີດຂໍ້ຜິດພາດ: $e"), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            child: const Text("ລົບ", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _toggleLike(String currentUserId, List<String> likedBy) async {
     if (currentUserId.isEmpty) return;
     final docRef = FirebaseFirestore.instance.collection('user_posts').doc(widget.postId);
@@ -1929,6 +1968,27 @@ class _UserPostCardState extends State<_UserPostCard> with AutomaticKeepAliveCli
                     ],
                   ),
                 ),
+                if (userId.isNotEmpty && userId == currentUserId)
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.grey),
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        _confirmDeletePost(context);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                            SizedBox(width: 8),
+                            Text('ລົບໂພສຕ໌', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
