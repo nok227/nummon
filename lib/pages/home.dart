@@ -578,7 +578,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     const StorySection(),
                     const Padding(
-                      padding: EdgeInsets.only(left: 16, top: 20, bottom: 8),
+                      padding: EdgeInsets.only(left: 16, top: 20, bottom: 0),
                       child: Text("ສະຖານທີ່ຍອດນິຍົມ",
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
@@ -780,46 +780,49 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
-  void _showReactionPicker(BuildContext context) {
-    _dismissReactionOverlay();
+void _showReactionPicker(BuildContext context) {
+  _dismissReactionOverlay();
 
-    _reactionOverlayEntry = OverlayEntry(
-      builder: (context) {
-        return Stack(
-          children: [
-            GestureDetector(
-              onTap: _dismissReactionOverlay,
-              behavior: HitTestBehavior.translucent,
-              child: const SizedBox.expand(),
-            ),
-            Positioned(
-              child: ReactionPicker(
-                postId: widget.place.id,
-                placeId: widget.place.id,
-                layerLink: _layerLink,
-                onEmojiSelected: (emoji) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    setState(() {
-                      if (_selectedReaction == emoji) {
-                        _selectedReaction = '';
-                      } else {
-                        _selectedReaction = emoji;
-                      }
-                    });
-                    _saveReaction();
+  _reactionOverlayEntry = OverlayEntry(
+    builder: (context) {
+      return Stack(
+        children: [
+          GestureDetector(
+            onTap: _dismissReactionOverlay,
+            behavior: HitTestBehavior.translucent,
+            child: const SizedBox.expand(),
+          ),
+          Positioned(
+            child: ReactionPicker(
+              postId: widget.place.id,
+              placeId: widget.place.id,
+              layerLink: _layerLink,
+              onEmojiSelected: (emoji) {
+                // ✅ เลือกอีโมจิ
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() {
+                    if (_selectedReaction == emoji) {
+                      _selectedReaction = '';
+                    } else {
+                      _selectedReaction = emoji;
+                    }
                   });
-                },
-                onDismiss: _dismissReactionOverlay,
-              ),
+                  _saveReaction(); // ✅ บันทึกทันที
+                });
+                // ✅ ปิด picker
+                _dismissReactionOverlay();
+              },
+              onDismiss: _dismissReactionOverlay,
             ),
-          ],
-        );
-      },
-    );
+          ),
+        ],
+      );
+    },
+  );
 
-    Overlay.of(context).insert(_reactionOverlayEntry!);
-  }
+  Overlay.of(context).insert(_reactionOverlayEntry!);
+}
 
   // ✅ ฟังก์ชันเริ่มการตอบกลับ
   void _startReply(String commentId, String userName) {

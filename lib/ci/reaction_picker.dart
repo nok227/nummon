@@ -106,7 +106,6 @@ class _ReactionPickerState extends State<ReactionPicker> {
                   onTap: () {
                     if (_isDismissed || !mounted) return;
                     _isDismissed = true;
-                    widget.onDismiss();
                     _openAllEmojis(context);
                   },
                   child: Container(
@@ -142,100 +141,100 @@ class _ReactionPickerState extends State<ReactionPicker> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              minChildSize: 0.4,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (context, scrollController) {
+                return Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '🗃️ ຄັງອີ່ໂມຈິ (${EmojiStorage.totalEmojis})',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '🗃️ ຄັງອີ່ໂມຈິ (${EmojiStorage.totalEmojis})',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          if (mounted) {
-                            Navigator.pop(context);
-                          }
-                        },
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: GridView.builder(
+                          controller: scrollController,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                            childAspectRatio: 1,
+                          ),
+                          itemCount: EmojiStorage.allEmojis.length,
+                          itemBuilder: (context, index) {
+                            final item = EmojiStorage.allEmojis[index];
+                            return GestureDetector(
+                              onTap: () {
+                                // 🛠️ แก้ไขเรียบร้อย: เอา 'if (!mounted) return;' ออก 
+                                // เพื่อให้กดเลือกอีโมจิจากคลังด้านในส่งขึ้นระบบได้ทันที
+                                widget.onEmojiSelected(item['emoji']!);
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.grey[200]!,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      item['emoji']!,
+                                      style: const TextStyle(fontSize: 28),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      item['label']!,
+                                      style: TextStyle(
+                                        fontSize: 8,
+                                        color: Colors.grey[600],
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      maxLines: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: GridView.builder(
-                      controller: scrollController,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 6,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 1,
-                      ),
-                      itemCount: EmojiStorage.allEmojis.length,
-                      itemBuilder: (context, index) {
-                        final item = EmojiStorage.allEmojis[index];
-                        return GestureDetector(
-                          onTap: () {
-                            if (!mounted) return;
-                            widget.onEmojiSelected(item['emoji']!);
-                            Navigator.pop(context);
-                            Future.delayed(const Duration(milliseconds: 50), () {
-                              if (mounted) {
-                                widget.onDismiss();
-                              }
-                            });
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.grey[200]!,
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  item['emoji']!,
-                                  style: const TextStyle(fontSize: 28),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  item['label']!,
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: Colors.grey[600],
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  maxLines: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
-    );
+    ).whenComplete(() {
+      widget.onDismiss();
+    });
   }
 }

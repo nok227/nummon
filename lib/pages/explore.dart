@@ -9,6 +9,7 @@ import '../models/comment_model.dart';
 import '../ci/reaction_picker.dart';
 import '../models/emoji_storage.dart';
 import '../private/profile_page.dart';
+import '../chats/inquiry_button.dart'; // เพิ่ม Import สำหรับปุ่มแชท
 
 class ExplorePage extends StatefulWidget {
   final ScrollController scrollController;
@@ -1280,6 +1281,7 @@ class _UserPostCardState extends State<_UserPostCard>
     final userName = postData['userName'] ?? 'ນັກທ່ອງທ່ຽວ';
     final userAvatar = postData['userAvatar'] ?? '';
     final userId = postData['userId'] ?? '';
+    debugPrint('🔵 CHAT BTN CHECK -> currentUserId: "$currentUserId" | postOwnerId: "$userId" | willShow: ${currentUserId.isNotEmpty && currentUserId != userId}');
     final title = postData['title'] ?? '';
     final content = postData['content'] ?? '';
     final placeName = postData['placeName'] ?? '';
@@ -1407,6 +1409,22 @@ class _UserPostCardState extends State<_UserPostCard>
                     ],
                   ),
                 ),
+                // 🔴 ปุ่มแชท: กดแล้วเปิดหน้าแชทกับเจ้าของโพสต์ทันที 🔴
+                if (currentUserId.isNotEmpty && currentUserId != userId)
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline,
+                        color: Colors.teal, size: 22),
+                    tooltip: 'ສົ່ງຂໍ້ຄວາມ',
+                    onPressed: () {
+                      final inquiryBtn = InquiryButton(
+                        targetUserId: userId,
+                        targetName: userName,
+                        targetPhotoUrl: userAvatar,
+                      );
+                      inquiryBtn.openChat(context);
+                    },
+                  ),
+                // 🔴 ------------------------------------------------- 🔴
               ],
             ),
           ),
@@ -1816,6 +1834,23 @@ class UserAllPostsPage extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold)),
             backgroundColor: Colors.teal,
             foregroundColor: Colors.white,
+            // 🔴 ส่วนที่เพิ่มปุ่มแชทเข้ามาครับ 🔴
+            actions: [
+              if (currentUserId.isNotEmpty && currentUserId != userId)
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  onPressed: () {
+                    final inquiryBtn = InquiryButton(
+                      targetUserId: userId,
+                      targetName: displayName,
+                      targetPhotoUrl: photoUrl,
+                    );
+                    inquiryBtn.openChat(context);
+                  },
+                  tooltip: 'ສົ່ງຂໍ້ຄວາມ',
+                ),
+            ],
+            // 🔴 ------------------------ 🔴
           ),
           body: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
